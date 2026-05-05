@@ -152,6 +152,23 @@ async def api_delete(analysis_id: str, _: None = Depends(auth.require_auth)):
     return {"ok": True}
 
 
+@app.patch('/api/history/{analysis_id}')
+async def api_rename(
+    analysis_id: str, request: Request,
+    _: None = Depends(auth.require_auth),
+):
+    if not storage.get_analysis(analysis_id):
+        raise HTTPException(404, "Analysis not found")
+    body = await request.json()
+    title = (body.get('title') or '').strip()
+    if not title:
+        raise HTTPException(400, "Title cannot be empty")
+    if len(title) > 200:
+        raise HTTPException(400, "Title is too long (200 char max)")
+    storage.update_analysis(analysis_id, title=title)
+    return {"ok": True, "title": title}
+
+
 # ── Submission ────────────────────────────────────────────────────────────────
 
 @app.post('/api/analyze')
@@ -353,7 +370,14 @@ async def api_export(
 
     title = a.get('title') or 'analysis'
     video = _find_video(analysis_id)
-    video_arg = video.name if video else ''
+
+    # For YouTube-sourced analyses, point the exported HTML at the YouTube URL
+    # so it gets a slim shareable iframe instead of a local file reference that
+    # only works while the mp4 sits next to the HTML.
+    if a.get('source') == 'youtube' and a.get('source_url'):
+        video_arg = a['source_url']
+    else:
+        video_arg = video.name if video else ''
 
     if fmt == 'html':
         from modules.html_exporter import export_to_html
@@ -382,6 +406,26 @@ async def api_comments_list(
     return {"items": storage.list_comments(analysis_id)}
 
 
+_VALID_COMMENT_FIELDS = {'vo', 'desc', 'ost', 'audio', 'summary'}
+
+
+def _parse_field(raw):
+    """Validate the optional anchor `field`. Allow `dialogue:N` or one of the
+    fixed names. Return None for unanchored (legacy) beat-level comments."""
+    if not raw:
+        return None
+    raw = str(raw)
+    if raw in _VALID_COMMENT_FIELDS:
+        return raw
+    if raw.startswith('dialogue:'):
+        try:
+            int(raw.split(':', 1)[1])
+            return raw
+        except ValueError:
+            pass
+    raise HTTPException(400, f"Invalid comment field: {raw!r}")
+
+
 @app.post('/api/results/{analysis_id}/comments')
 async def api_comments_add(
     analysis_id: str, request: Request,
@@ -400,7 +444,27 @@ async def api_comments_add(
     if len(body) > 4000:
         raise HTTPException(400, "Comment exceeds 4000 characters")
     author = (payload.get('author') or '').strip()[:60]
-    cid = storage.add_comment(analysis_id, beat_index, body, author)
+
+    field = _parse_field(payload.get('field'))
+    quote = (payload.get('quote') or '').strip()[:2000] or None
+    start_offset = payload.get('start_offset')
+    end_offset = payload.get('end_offset')
+    if field is not None:
+        try:
+            start_offset = int(start_offset)
+            end_offset = int(end_offset)
+        except (TypeError, ValueError):
+            raise HTTPException(400, "start_offset and end_offset are required for anchored comments")
+        if start_offset < 0 or end_offset <= start_offset:
+            raise HTTPException(400, "Invalid offset range")
+    else:
+        start_offset = end_offset = None
+
+    cid = storage.add_comment(
+        analysis_id, beat_index, body, author,
+        field=field, quote=quote,
+        start_offset=start_offset, end_offset=end_offset,
+    )
     return {"id": cid, "ok": True}
 
 
@@ -412,13 +476,24 @@ async def api_comments_edit(
     if not storage.get_comment(comment_id):
         raise HTTPException(404, "Comment not found")
     payload = await request.json()
-    body = (payload.get('body') or '').strip()
-    if not body:
-        raise HTTPException(400, "Comment body is empty")
-    if len(body) > 4000:
-        raise HTTPException(400, "Comment exceeds 4000 characters")
-    storage.update_comment(comment_id, body)
-    return {"ok": True, "body": body}
+
+    body = payload.get('body')
+    if body is not None:
+        body = body.strip()
+        if not body:
+            raise HTTPException(400, "Comment body is empty")
+        if len(body) > 4000:
+            raise HTTPException(400, "Comment exceeds 4000 characters")
+
+    resolved = payload.get('resolved')
+    if resolved is not None:
+        resolved = bool(resolved)
+
+    if body is None and resolved is None:
+        raise HTTPException(400, "Nothing to update")
+
+    storage.update_comment(comment_id, body=body, resolved=resolved)
+    return {"ok": True, "body": body, "resolved": resolved}
 
 
 @app.delete('/api/comments/{comment_id}')

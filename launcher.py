@@ -236,7 +236,7 @@ def _run_analysis(video_input: str, fmt: str) -> bool:
     console.print()
 
     try:
-        video_path, title = get_video(video_input)
+        video_path, title, source_meta = get_video(video_input)
         console.print()
         ok(f"[bold]{title}[/bold]")
     except Exception as e:
@@ -373,15 +373,14 @@ def _run_analysis(video_input: str, fmt: str) -> bool:
 
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-    # Copy video into output folder so the HTML player can reference it locally
     safe_name  = re.sub(r'[^\w\s\-]', '', title).strip().replace(' ', '_')[:60]
-    local_video = os.path.join(OUTPUT_DIR, safe_name + '.mp4')
-    try:
-        shutil.copy2(video_path, local_video)
-        ok(f"Video saved for local playback.")
-    except Exception as e:
-        info(f"Could not save local video copy: {e}")
-        local_video = video_input  # fall back to original source
+
+    # Pick what the HTML player will reference:
+    # - YouTube + embeddable  → YT iframe (slim, shareable HTML)
+    # - YouTube + blocked     → compressed + base64 embed (self-contained)
+    # - Local file            → copy mp4 next to the HTML
+    html_video_source = _pick_html_source(video_input, video_path, title,
+                                          source_meta, safe_name)
 
     # Save raw JSON so PDF can be regenerated without re-analyzing
     import json as _json
@@ -396,7 +395,7 @@ def _run_analysis(video_input: str, fmt: str) -> bool:
 
     try:
         if fmt in ('html', 'all'):
-            outputs.append(export_to_html(result, OUTPUT_DIR, title, local_video))
+            outputs.append(export_to_html(result, OUTPUT_DIR, title, html_video_source))
             outputs.append(export_to_pdf(result, OUTPUT_DIR, title))  # always include PDF with HTML
         elif fmt in ('pdf', 'all'):
             outputs.append(export_to_pdf(result, OUTPUT_DIR, title))
@@ -433,6 +432,56 @@ def _run_analysis(video_input: str, fmt: str) -> bool:
         pass
 
     return True
+
+
+def _pick_html_source(video_input: str, video_path: str, title: str,
+                      source_meta: dict, safe_name: str) -> str:
+    """Choose what the HTML player will reference.
+
+    Returns one of:
+      - the original YouTube URL       (YT iframe, slim HTML)
+      - a `data:video/mp4;base64,...`  (self-contained HTML)
+      - a local file path              (mp4 alongside HTML)
+    """
+    src = source_meta.get('source')
+
+    if src == 'youtube' and source_meta.get('playable_in_embed', True):
+        return video_input
+
+    if src == 'youtube':
+        console.print()
+        info("YouTube has disabled embedding for this video — embedding it directly into the HTML instead.")
+        return _build_base64_source(video_path)
+
+    local_video = os.path.join(OUTPUT_DIR, safe_name + '.mp4')
+    try:
+        shutil.copy2(video_path, local_video)
+        ok("Video saved for local playback.")
+        return local_video
+    except Exception as e:
+        info(f"Could not save local video copy: {e}")
+        return video_input
+
+
+def _build_base64_source(video_path: str) -> str:
+    """Compress the video and return it as a base64 data URL."""
+    from modules.video_embedder import compress_for_embed, to_data_url
+    from modules.downloader import _env_with_ffmpeg
+
+    preset = os.getenv('EMBED_PRESET', 'balanced')  # heavy | balanced | light
+    info(f"Compressing video for embed (preset: {preset})...")
+    try:
+        compressed = compress_for_embed(video_path, preset=preset,
+                                        ffmpeg_env=_env_with_ffmpeg())
+    except Exception as e:
+        err(f"Compression failed: {e}")
+        raise
+
+    size_mb = os.path.getsize(compressed) / (1024 * 1024)
+    ok(f"Compressed to {size_mb:.1f} MB — encoding to base64...")
+    data_url = to_data_url(compressed)
+    ok(f"Base64 embed ready (~{size_mb * 1.33:.0f} MB added to HTML).")
+    return data_url
 
 
 if __name__ == '__main__':

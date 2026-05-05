@@ -49,6 +49,20 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_comments_lookup ON comments(analysis_id, beat_index);
         """)
 
+        # Anchored-comment columns. SQLite can't ADD COLUMN IF NOT EXISTS, so try
+        # each individually and ignore failures from prior runs.
+        for ddl in (
+            "ALTER TABLE comments ADD COLUMN field TEXT",
+            "ALTER TABLE comments ADD COLUMN quote TEXT",
+            "ALTER TABLE comments ADD COLUMN start_offset INTEGER",
+            "ALTER TABLE comments ADD COLUMN end_offset INTEGER",
+            "ALTER TABLE comments ADD COLUMN resolved INTEGER DEFAULT 0",
+        ):
+            try:
+                c.execute(ddl)
+            except sqlite3.OperationalError:
+                pass
+
 
 # ── Analyses ──────────────────────────────────────────────────────────────────
 
@@ -146,13 +160,17 @@ def folder_size(analysis_id):
 
 # ── Comments ──────────────────────────────────────────────────────────────────
 
-def add_comment(analysis_id, beat_index, body, author=''):
+def add_comment(analysis_id, beat_index, body, author='',
+                field=None, quote=None, start_offset=None, end_offset=None):
     with _lock, _conn() as c:
         cur = c.execute(
-            "INSERT INTO comments (analysis_id, beat_index, author, body, created_at) "
-            "VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO comments "
+            "(analysis_id, beat_index, author, body, created_at, "
+            " field, quote, start_offset, end_offset, resolved) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)",
             (analysis_id, beat_index, author or 'Anonymous',
-             body, int(time.time()))
+             body, int(time.time()),
+             field, quote, start_offset, end_offset)
         )
         return cur.lastrowid
 
@@ -160,21 +178,32 @@ def add_comment(analysis_id, beat_index, body, author=''):
 def list_comments(analysis_id):
     with _lock, _conn() as c:
         return [dict(r) for r in c.execute(
-            "SELECT id, beat_index, author, body, created_at FROM comments "
-            "WHERE analysis_id = ? ORDER BY beat_index, created_at",
+            "SELECT id, beat_index, author, body, created_at, "
+            "       field, quote, start_offset, end_offset, resolved "
+            "FROM comments WHERE analysis_id = ? "
+            "ORDER BY beat_index, created_at",
             (analysis_id,)
         ).fetchall()]
 
 
-def update_comment(comment_id, body):
+def update_comment(comment_id, body=None, resolved=None):
+    sets, vals = [], []
+    if body is not None:
+        sets.append("body = ?"); vals.append(body)
+    if resolved is not None:
+        sets.append("resolved = ?"); vals.append(1 if resolved else 0)
+    if not sets:
+        return
+    vals.append(comment_id)
     with _lock, _conn() as c:
-        c.execute("UPDATE comments SET body = ? WHERE id = ?", (body, comment_id))
+        c.execute(f"UPDATE comments SET {', '.join(sets)} WHERE id = ?", vals)
 
 
 def get_comment(comment_id):
     with _lock, _conn() as c:
         row = c.execute(
-            "SELECT id, analysis_id, beat_index, author, body, created_at "
+            "SELECT id, analysis_id, beat_index, author, body, created_at, "
+            "       field, quote, start_offset, end_offset, resolved "
             "FROM comments WHERE id = ?", (comment_id,)
         ).fetchone()
         return dict(row) if row else None

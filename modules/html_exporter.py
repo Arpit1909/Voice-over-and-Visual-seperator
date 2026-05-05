@@ -81,6 +81,17 @@ def _video_player(source: str) -> tuple:
     if not source:
         return '', 'none', ''
 
+    # Base64 data URL — video is embedded directly in the HTML.
+    # Reuse the 'local' player type; the same <video> JS handles seek/pause.
+    if source.startswith('data:'):
+        html = f'''
+<div class="player-wrap">
+  <video id="local-video" controls preload="metadata" style="background:#000">
+    <source src="{source}" type="video/mp4">
+  </video>
+</div>'''
+        return html, 'local', ''
+
     yt_id = _extract_yt_id(source)
     if yt_id:
         html = f'''

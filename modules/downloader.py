@@ -37,11 +37,17 @@ _FFMPEG_PATHS = [
 ]
 
 
-def get_video(input_path: str) -> tuple[str, str]:
-    """Return (local_path, title) for a YouTube URL or local file."""
+def get_video(input_path: str) -> tuple[str, str, dict]:
+    """Return (local_path, title, meta) for a YouTube URL or local file.
+
+    `meta` describes the source for downstream export decisions:
+      - {'source': 'youtube', 'url': ..., 'video_id': ..., 'playable_in_embed': bool}
+      - {'source': 'local'}
+    """
     if input_path.startswith(('http://', 'https://', 'www.', 'youtu')):
         return _download_youtube(input_path)
-    return _validate_local(input_path)
+    path, title = _validate_local(input_path)
+    return path, title, {'source': 'local'}
 
 
 def _env_with_ffmpeg() -> dict:
@@ -65,7 +71,7 @@ def _ffmpeg_dir() -> str:
     return ''
 
 
-def _download_youtube(url: str) -> tuple[str, str]:
+def _download_youtube(url: str) -> tuple[str, str, dict]:
     env = _env_with_ffmpeg()
 
     print("Fetching video info from YouTube...")
@@ -76,6 +82,15 @@ def _download_youtube(url: str) -> tuple[str, str]:
         raise ValueError(f"Video is {duration // 60} minutes long. Maximum allowed is 60 minutes.")
 
     title      = info.get('title', 'video')
+    video_id   = info.get('id', '')
+    embeddable = info.get('playable_in_embed', True)
+    meta = {
+        'source': 'youtube',
+        'url': url,
+        'video_id': video_id,
+        'playable_in_embed': bool(embeddable),
+    }
+
     output_dir = tempfile.mkdtemp(prefix='video_analyzer_')
     output_tpl = os.path.join(output_dir, '%(id)s.%(ext)s')
 
@@ -106,7 +121,7 @@ def _download_youtube(url: str) -> tuple[str, str]:
                     path = os.path.join(output_dir, files[0])
                     if not path.endswith('.mp4'):
                         path = _convert_to_mp4(path, env)
-                    return path, title
+                    return path, title, meta
 
             except subprocess.CalledProcessError as e:
                 last_error = e

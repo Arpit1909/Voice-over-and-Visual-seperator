@@ -67,7 +67,7 @@ def main():
     # Step 1: Get video
     print(f"\n[1/3] Loading video: {args.input}")
     try:
-        video_path, title = get_video(args.input)
+        video_path, title, source_meta = get_video(args.input)
         print(f"      Title: {title}")
         print(f"      Path:  {video_path}")
     except Exception as e:
@@ -97,9 +97,11 @@ def main():
             json.dump(result, f, indent=2, ensure_ascii=False)
         print(f"      JSON saved → {json_path}")
 
+    html_source = _pick_html_source_cli(args.input, video_path, source_meta)
+
     try:
         if args.format in ('html', 'all'):
-            export_to_html(result, args.output, title, args.input)
+            export_to_html(result, args.output, title, html_source)
         if args.format in ('docx', 'all'):
             export_to_docx(result, args.output, title)
         if args.format in ('txt', 'all'):
@@ -111,6 +113,27 @@ def main():
     print(f"\n{'='*60}")
     print(f"  Done! Results saved to: {os.path.abspath(args.output)}/")
     print(f"{'='*60}\n")
+
+
+def _pick_html_source_cli(video_input: str, video_path: str, meta: dict) -> str:
+    """Choose what the exported HTML player should reference.
+
+    - YouTube + embeddable → original URL (slim HTML, YT iframe)
+    - YouTube + blocked    → base64 data URL (self-contained HTML)
+    - Local file           → local path (mp4 sits next to the HTML)
+    """
+    src = meta.get('source')
+    if src == 'youtube' and meta.get('playable_in_embed', True):
+        return video_input
+    if src == 'youtube':
+        print("      YouTube embed disabled by uploader — embedding video directly into HTML.")
+        from modules.video_embedder import compress_for_embed, to_data_url
+        from modules.downloader import _env_with_ffmpeg
+        preset = os.getenv('EMBED_PRESET', 'balanced')
+        compressed = compress_for_embed(video_path, preset=preset,
+                                        ffmpeg_env=_env_with_ffmpeg())
+        return to_data_url(compressed)
+    return video_path
 
 
 if __name__ == '__main__':

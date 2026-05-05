@@ -181,6 +181,66 @@ function highlightHistory(activeId) {
   });
 }
 
+// Replace a history item's title with an inline input. Saves on Enter or blur,
+// cancels on Escape. Updates the viewer header too if you're viewing this id.
+function startRename(item) {
+  if (!item || item.querySelector('.hist-title-input')) return;
+  const id = item.dataset.id;
+  const titleEl = item.querySelector('.hist-title');
+  const original = titleEl.textContent;
+
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'hist-title-input';
+  input.value = original;
+  input.maxLength = 200;
+  titleEl.replaceWith(input);
+  input.focus();
+  input.select();
+
+  let settled = false;
+  const restore = (text) => {
+    const el = document.createElement('div');
+    el.className = 'hist-title';
+    el.title = text;
+    el.textContent = text;
+    input.replaceWith(el);
+  };
+
+  const commit = async () => {
+    if (settled) return;
+    settled = true;
+    const next = input.value.trim();
+    if (!next || next === original) { restore(original); return; }
+    restore(next);
+    try {
+      await api(`/api/history/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: next }),
+      });
+      // Reflect in the viewer header if we're currently looking at this id.
+      const titleNode = document.getElementById('viewer-title');
+      if (titleNode && window.location.hash === `#/view/${id}`) {
+        titleNode.textContent = next;
+      }
+      toast('Renamed', 'success');
+    } catch (err) {
+      toast(`Rename failed: ${err.message}`, 'error');
+      // Roll back the optimistic UI update.
+      const el = item.querySelector('.hist-title');
+      if (el) { el.textContent = original; el.title = original; }
+    }
+  };
+
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter')  { e.preventDefault(); commit(); }
+    if (e.key === 'Escape') { e.preventDefault(); settled = true; restore(original); }
+  });
+  input.addEventListener('blur', commit);
+  input.addEventListener('click', e => e.stopPropagation());
+}
+
 async function refreshHistory() {
   try {
     const { items } = await api('/api/history');
@@ -208,17 +268,28 @@ async function refreshHistory() {
               <span>${esc(fmtRel(it.created_at))}</span>
             </div>
           </div>
-          <button class="hist-del" data-id="${esc(it.id)}" title="Delete from server">✕</button>
+          <div class="hist-actions">
+            <button class="hist-edit" data-id="${esc(it.id)}" title="Rename">✎</button>
+            <button class="hist-del" data-id="${esc(it.id)}" title="Delete from server">✕</button>
+          </div>
         </div>`;
     }).join('');
 
     $$('#history-list .hist-item').forEach(el => {
       el.addEventListener('click', e => {
-        if (e.target.classList.contains('hist-del')) return;
+        // Don't navigate when clicking action buttons or while editing the title.
+        if (e.target.closest('.hist-actions')) return;
+        if (e.target.classList.contains('hist-title-input')) return;
         const id = el.dataset.id;
         const st = el.dataset.status;
         if (st === 'done') navigate(`#/view/${id}`);
         else navigate(`#/job/${id}`);
+      });
+    });
+    $$('#history-list .hist-edit').forEach(b => {
+      b.addEventListener('click', e => {
+        e.stopPropagation();
+        startRename(b.closest('.hist-item'));
       });
     });
     $$('#history-list .hist-del').forEach(b => {
@@ -785,11 +856,13 @@ function _renderViewer(id, payload, comments, token) {
     }
   };
 
-  // Index comments by beat
+  // Index comments by beat AND by id (for popover lookup).
   const commentsByBeat = {};
   for (const c of (comments?.items || [])) {
     (commentsByBeat[c.beat_index] = commentsByBeat[c.beat_index] || []).push(c);
   }
+  _indexComments(comments?.items);
+  _currentAnalysisId = id;
 
   // Flatten beats with global index
   const beats = [];
@@ -830,16 +903,36 @@ function renderBeat(entry, idx, allBeats, comments) {
   const endSec = tsToSec(vE) || tsToSec(voE);
 
   const tone = vo.tone ? `<span class="tone-tag">${esc(vo.tone)}</span>` : '';
-  const voText = esc(vo.text || '');
+
+  // Group anchored comments by field; keep beat-level (no field) separate.
+  const live = (comments || []).filter(c => !c.resolved);
+  const byField = {};
+  const beatLevel = [];
+  for (const c of live) {
+    if (c.field) (byField[c.field] = byField[c.field] || []).push(c);
+    else beatLevel.push(c);
+  }
+
+  const voText = renderHighlighted(vo.text || '', byField['vo']);
+  const visDesc = renderHighlighted(viz.description || '', byField['desc']);
+  const ostText = renderHighlighted(viz.on_screen_text || '', byField['ost']);
+  const audioText = renderHighlighted(viz.audio_notes || '', byField['audio']);
+  const summaryText = renderHighlighted(viz.summary || '', byField['summary']);
 
   const ost = (viz.on_screen_text && !['NONE', 'N/A'].includes(String(viz.on_screen_text).toUpperCase()))
-    ? `<div class="viz-meta"><span class="viz-label">On-screen text</span><span class="viz-val">${esc(viz.on_screen_text)}</span></div>` : '';
-  const audio = viz.audio_notes ? `<div class="viz-meta"><span class="viz-label">Audio</span><span class="viz-val">${esc(viz.audio_notes)}</span></div>` : '';
-  const summary = viz.summary ? `<div class="viz-summary"><span>${esc(viz.summary)}</span></div>` : '';
+    ? `<div class="viz-meta"><span class="viz-label">On-screen text</span><span class="viz-val" data-comment-field="ost">${ostText}</span></div>` : '';
+  const audio = viz.audio_notes
+    ? `<div class="viz-meta"><span class="viz-label">Audio</span><span class="viz-val" data-comment-field="audio">${audioText}</span></div>` : '';
+  const summary = viz.summary
+    ? `<div class="viz-summary"><span data-comment-field="summary">${summaryText}</span></div>` : '';
 
   const dialogueRows = (viz.dialogue || [])
-    .filter(d => d && d.quote)
-    .map(d => `<div class="dlg-row"><span class="dlg-speaker">${esc(d.speaker || '')}:</span><span class="dlg-quote">&ldquo;${esc(d.quote)}&rdquo;</span></div>`)
+    .map((d, di) => ({ d, di }))
+    .filter(x => x.d && x.d.quote)
+    .map(({ d, di }) => {
+      const dialogueText = renderHighlighted(d.quote, byField[`dialogue:${di}`]);
+      return `<div class="dlg-row"><span class="dlg-speaker">${esc(d.speaker || '')}:</span><span class="dlg-quote" data-comment-field="dialogue:${di}">&ldquo;${dialogueText}&rdquo;</span></div>`;
+    })
     .join('');
   const dialogueBlock = dialogueRows
     ? `<div class="dialogue-block"><div class="dlg-label">On-camera dialogue</div>${dialogueRows}</div>` : '';
@@ -858,8 +951,6 @@ function renderBeat(entry, idx, allBeats, comments) {
       <span class="section-meta">${sectionCount} beat${sectionCount === 1 ? '' : 's'}</span>
     </div>` : '';
 
-  const commentBlock = renderCommentBlock(idx, comments);
-
   const beatStartTs = voS || vS;
   const beatEndTs = vE || voE;
   const beatRange = beatStartTs && beatEndTs && beatStartTs !== beatEndTs
@@ -872,6 +963,11 @@ function renderBeat(entry, idx, allBeats, comments) {
   })[beat.beat_type] || 'Beat';
   const beatTypeClass = `beat-type beat-type--${beat.beat_type || 'narration'}`;
 
+  // Beat-level legacy notes — render as a small pin in the header.
+  const beatPin = beatLevel.length
+    ? `<button class="beat-note-pin" data-beat-pin="${idx}" title="${beatLevel.length} note${beatLevel.length === 1 ? '' : 's'} on this beat">💬 ${beatLevel.length}</button>`
+    : '';
+
   return `
 ${sectionHeader}
 <article class="beat" id="beat-${idx}" data-idx="${idx}" data-start="${startSec}" data-end="${endSec}">
@@ -880,6 +976,7 @@ ${sectionHeader}
     <span class="${beatTypeClass}">${beatTypeLabel}</span>
     ${beatRange ? `<span class="beat-time-range" title="Beat span">⏱ ${beatRange}</span>` : ''}
     <span class="beat-head-spacer"></span>
+    ${beatPin}
   </header>
   <div class="beat-body">
     <div class="vo-col">
@@ -889,7 +986,7 @@ ${sectionHeader}
       </div>
       <div class="col-content">
         ${tone}
-        <p class="vo-text">${voText || '<em class="muted">— no voice-over —</em>'}</p>
+        <p class="vo-text" data-comment-field="vo">${voText || '<em class="muted">— no voice-over —</em>'}</p>
       </div>
     </div>
     <div class="vis-col">
@@ -898,7 +995,7 @@ ${sectionHeader}
         ${visBadge}
       </div>
       <div class="col-content">
-        <p class="vis-desc">${esc(viz.description || '')}</p>
+        <p class="vis-desc" data-comment-field="desc">${visDesc}</p>
         ${dialogueBlock}
         ${ost}
         ${audio}
@@ -906,39 +1003,301 @@ ${sectionHeader}
       </div>
     </div>
   </div>
-  ${commentBlock}
 </article>`;
 }
 
-function renderCommentBlock(beatIdx, comments) {
-  const count = comments.length;
-  const list = comments.map(c => `
-    <div class="comment" data-cid="${c.id}">
-      <div class="comment-head">
-        <span class="comment-author">${esc(c.author || 'Anonymous')}</span>
-        <span class="comment-time">${esc(fmtRel(c.created_at))}</span>
-        <div class="comment-actions">
-          <button class="comment-edit" data-cid="${c.id}" title="Edit">✎</button>
-          <button class="comment-del" data-cid="${c.id}" title="Delete">✕</button>
-        </div>
-      </div>
-      <div class="comment-body" data-original="${esc(c.body)}">${esc(c.body)}</div>
-    </div>`).join('');
+// Wrap [start_offset, end_offset) ranges of `text` in <mark> tags for each
+// non-resolved comment. Overlapping ranges → first wins (later highlights
+// inside an earlier one are dropped). Renders escaped HTML safe to inject.
+function renderHighlighted(text, comments) {
+  const safe = (s) => esc(s);
+  if (!text) return '';
+  if (!comments || !comments.length) return safe(text);
 
+  const ranges = comments
+    .filter(c => Number.isInteger(c.start_offset) && Number.isInteger(c.end_offset))
+    .filter(c => c.start_offset >= 0 && c.end_offset <= text.length && c.end_offset > c.start_offset)
+    .sort((a, b) => a.start_offset - b.start_offset);
+
+  let out = '';
+  let cursor = 0;
+  for (const r of ranges) {
+    if (r.start_offset < cursor) continue;  // overlapping → drop later one
+    out += safe(text.slice(cursor, r.start_offset));
+    const slice = safe(text.slice(r.start_offset, r.end_offset));
+    out += `<mark class="cmt-highlight" data-cid="${r.id}">${slice}</mark>`;
+    cursor = r.end_offset;
+  }
+  out += safe(text.slice(cursor));
+  return out;
+}
+
+// ── Comment popover system ─────────────────────────────────────────────────
+// Google-Docs-style: select text → "Add comment" floats near selection → click
+// to open a popover form. Existing highlights (and beat-level legacy notes)
+// open the same popover when clicked.
+
+let _floatingAdd = null;        // floating "Add comment" button
+let _popover = null;            // currently open popover element
+let _currentAnalysisId = null;  // set by _renderViewer
+const _commentsCache = {};      // cid -> comment object, refreshed each render
+
+function _indexComments(items) {
+  for (const k of Object.keys(_commentsCache)) delete _commentsCache[k];
+  for (const c of (items || [])) _commentsCache[c.id] = c;
+}
+
+function _hideFloatingAdd() { if (_floatingAdd) { _floatingAdd.remove(); _floatingAdd = null; } }
+function _hidePopover()     { if (_popover)     { _popover.remove();     _popover = null; } }
+
+// Character offset of (node, offset) within the field's textContent.
+function _offsetWithin(field, targetNode, targetOffset) {
+  let total = 0;
+  const walker = document.createTreeWalker(field, NodeFilter.SHOW_TEXT);
+  let node;
+  while ((node = walker.nextNode())) {
+    if (node === targetNode) return total + targetOffset;
+    total += node.nodeValue.length;
+  }
+  // If target is the field itself (rare), fall back to length-so-far + offset.
+  return targetNode === field ? targetOffset : -1;
+}
+
+function _maybeShowAddButton() {
+  const sel = window.getSelection();
+  if (!sel || sel.isCollapsed || !sel.rangeCount) { _hideFloatingAdd(); return; }
+  const range = sel.getRangeAt(0);
+  if (range.collapsed) { _hideFloatingAdd(); return; }
+  const startEl = range.startContainer.nodeType === 1
+    ? range.startContainer : range.startContainer.parentElement;
+  const endEl = range.endContainer.nodeType === 1
+    ? range.endContainer : range.endContainer.parentElement;
+  const field = startEl?.closest('[data-comment-field]');
+  if (!field || field !== endEl?.closest('[data-comment-field]')) {
+    _hideFloatingAdd(); return;
+  }
+  const beatEl = field.closest('.beat');
+  if (!beatEl) { _hideFloatingAdd(); return; }
+  const start = _offsetWithin(field, range.startContainer, range.startOffset);
+  const end   = _offsetWithin(field, range.endContainer,   range.endOffset);
+  if (start < 0 || end < 0 || end <= start) { _hideFloatingAdd(); return; }
+  const quote = sel.toString();
+  if (!quote.trim()) { _hideFloatingAdd(); return; }
+
+  const rect = range.getBoundingClientRect();
+  _hideFloatingAdd();
+  const btn = document.createElement('button');
+  btn.className = 'cmt-add-floating';
+  btn.type = 'button';
+  btn.innerHTML = '<span>💬</span> Add comment';
+  document.body.appendChild(btn);
+  btn.style.top = `${rect.bottom + 6}px`;
+  btn.style.left = `${rect.left + rect.width / 2 - btn.offsetWidth / 2}px`;
+  // Keep selection alive when the user mouses down on the button.
+  btn.addEventListener('mousedown', e => e.preventDefault());
+  btn.addEventListener('click', () => {
+    const anchorRect = rect;
+    _hideFloatingAdd();
+    sel.removeAllRanges();
+    _openNewCommentPopover({
+      beatIdx: +beatEl.dataset.idx,
+      field: field.dataset.commentField,
+      quote, start, end, anchorRect,
+    });
+  });
+  _floatingAdd = btn;
+}
+
+function _buildPopover(rect) {
+  _hidePopover();
+  const pop = document.createElement('div');
+  pop.className = 'cmt-popover';
+  document.body.appendChild(pop);
+  // Position once we know the size.
+  requestAnimationFrame(() => {
+    const w = pop.offsetWidth;
+    const h = pop.offsetHeight;
+    const margin = 12;
+    let top  = rect.bottom + 8;
+    let left = rect.left + rect.width / 2 - w / 2;
+    left = Math.max(margin, Math.min(left, window.innerWidth - w - margin));
+    if (top + h + margin > window.innerHeight) {
+      top = Math.max(margin, rect.top - h - 8);
+    }
+    pop.style.top  = `${top}px`;
+    pop.style.left = `${left}px`;
+  });
+  _popover = pop;
+  return pop;
+}
+
+function _openNewCommentPopover({ beatIdx, field, quote, start, end, anchorRect }) {
+  const pop = _buildPopover(anchorRect);
+  pop.innerHTML = `
+    <div class="cmt-pop-quote">${esc(quote)}</div>
+    <form class="cmt-pop-form">
+      <input type="text" class="cmt-pop-author" placeholder="Your name (optional)" maxlength="60">
+      <textarea class="cmt-pop-body" placeholder="Add a comment…" rows="3" required></textarea>
+      <div class="cmt-pop-actions">
+        <button type="button" class="link-btn cmt-pop-cancel">Cancel</button>
+        <button type="submit" class="btn-primary btn-small">Comment</button>
+      </div>
+    </form>`;
+  const ta = pop.querySelector('.cmt-pop-body');
+  ta.focus();
+  pop.querySelector('.cmt-pop-cancel').addEventListener('click', _hidePopover);
+  pop.querySelector('form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const body = ta.value.trim();
+    if (!body) return;
+    const author = pop.querySelector('.cmt-pop-author').value.trim();
+    try {
+      await api(`/api/results/${_currentAnalysisId}/comments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          beat_index: beatIdx, field, body, author, quote,
+          start_offset: start, end_offset: end,
+        }),
+      });
+      _hidePopover();
+      toast('Comment added', 'success');
+      _refetchAndRerender();
+    } catch (err) {
+      toast(`Could not add: ${err.message}`, 'error');
+    }
+  });
+}
+
+// Show one or more existing comments in a popover (handles both anchored
+// highlights — `cids` is single — and beat-level legacy pins — `cids` is many).
+function _openExistingPopover(cids, anchorRect) {
+  const items = cids.map(id => _commentsCache[id]).filter(Boolean);
+  if (!items.length) return;
+  const pop = _buildPopover(anchorRect);
+  pop.innerHTML = items.map(_renderThreadItem).join('');
+  pop.addEventListener('click', (e) => {
+    const item = e.target.closest('.cmt-thread-item');
+    if (!item) return;
+    const cid = +item.dataset.cid;
+    if (e.target.closest('.cmt-pop-edit'))    _enterPopoverEdit(cid, item);
+    if (e.target.closest('.cmt-pop-resolve')) _toggleResolve(cid);
+    if (e.target.closest('.cmt-pop-del'))     _deleteComment(cid);
+  });
+}
+
+function _renderThreadItem(c) {
+  const quoteHtml = c.quote ? `<div class="cmt-pop-quote">${esc(c.quote)}</div>` : '';
   return `
-  <div class="comment-block">
-    <button class="comment-toggle" data-toggle="${beatIdx}">
-      💬 ${count === 0 ? 'Add note' : `${count} note${count === 1 ? '' : 's'}`}
-    </button>
-    <div class="comment-panel" id="cmt-${beatIdx}" hidden>
-      <div class="comment-list">${list || '<p class="comment-empty">No notes yet.</p>'}</div>
-      <form class="comment-form" data-form="${beatIdx}">
-        <input type="text" name="author" placeholder="Your name (optional)" maxlength="60">
-        <textarea name="body" placeholder="Add a note for the team…" rows="2" required></textarea>
-        <button type="submit" class="btn-primary btn-small">Post note</button>
-      </form>
+    <div class="cmt-thread-item" data-cid="${c.id}">
+      ${quoteHtml}
+      <div class="cmt-pop-meta">
+        <span class="cmt-pop-author">${esc(c.author || 'Anonymous')}</span>
+        <span class="cmt-pop-time">${esc(fmtRel(c.created_at))}</span>
+      </div>
+      <div class="cmt-pop-body-text">${esc(c.body)}</div>
+      <div class="cmt-pop-actions">
+        <button type="button" class="link-btn cmt-pop-edit">Edit</button>
+        <button type="button" class="link-btn cmt-pop-resolve">${c.resolved ? 'Reopen' : 'Resolve'}</button>
+        <button type="button" class="link-btn cmt-pop-del">Delete</button>
+      </div>
+    </div>`;
+}
+
+function _enterPopoverEdit(cid, itemEl) {
+  const c = _commentsCache[cid];
+  if (!c) return;
+  const quoteHtml = c.quote ? `<div class="cmt-pop-quote">${esc(c.quote)}</div>` : '';
+  itemEl.innerHTML = `
+    ${quoteHtml}
+    <div class="cmt-pop-meta">
+      <span class="cmt-pop-author">${esc(c.author || 'Anonymous')}</span>
+      <span class="cmt-pop-time">${esc(fmtRel(c.created_at))}</span>
     </div>
-  </div>`;
+    <textarea class="cmt-pop-body cmt-pop-edit-input" rows="3">${esc(c.body)}</textarea>
+    <div class="cmt-pop-actions">
+      <button type="button" class="link-btn cmt-pop-edit-cancel">Cancel</button>
+      <button type="button" class="btn-primary btn-small cmt-pop-edit-save">Save</button>
+    </div>`;
+  const ta = itemEl.querySelector('.cmt-pop-edit-input');
+  ta.focus();
+  ta.setSelectionRange(ta.value.length, ta.value.length);
+  itemEl.querySelector('.cmt-pop-edit-cancel').addEventListener('click', _hidePopover);
+  itemEl.querySelector('.cmt-pop-edit-save').addEventListener('click', async () => {
+    const next = ta.value.trim();
+    if (!next) return;
+    try {
+      await api(`/api/comments/${cid}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ body: next }),
+      });
+      _hidePopover();
+      toast('Comment updated', 'success');
+      _refetchAndRerender();
+    } catch (err) {
+      toast(`Update failed: ${err.message}`, 'error');
+    }
+  });
+}
+
+async function _toggleResolve(cid) {
+  const c = _commentsCache[cid];
+  if (!c) return;
+  try {
+    await api(`/api/comments/${cid}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ resolved: !c.resolved }),
+    });
+    _hidePopover();
+    toast(c.resolved ? 'Reopened' : 'Resolved', 'success');
+    _refetchAndRerender();
+  } catch (err) {
+    toast(`Failed: ${err.message}`, 'error');
+  }
+}
+
+async function _deleteComment(cid) {
+  if (!confirm('Delete this comment?')) return;
+  try {
+    await api(`/api/comments/${cid}`, { method: 'DELETE' });
+    _hidePopover();
+    toast('Comment deleted', 'success');
+    _refetchAndRerender();
+  } catch (err) {
+    toast(`Delete failed: ${err.message}`, 'error');
+  }
+}
+
+async function _refetchAndRerender() {
+  const h = window.location.hash;
+  if (!h.startsWith('#/view/')) return;
+  const id = h.slice('#/view/'.length);
+  _cacheInvalidate(id);
+  loadViewer(id);
+}
+
+function setupCommentSelection() {
+  if (setupCommentSelection._done) return;
+  setupCommentSelection._done = true;
+  document.addEventListener('mouseup', (e) => {
+    if (e.target.closest('.cmt-popover, .cmt-add-floating')) return;
+    setTimeout(_maybeShowAddButton, 0);
+  });
+  document.addEventListener('selectionchange', () => {
+    const sel = window.getSelection();
+    if (!sel || sel.isCollapsed) _hideFloatingAdd();
+  });
+  document.addEventListener('mousedown', (e) => {
+    if (!_popover) return;
+    if (e.target.closest('.cmt-popover')) return;
+    if (e.target.closest('.cmt-highlight, .beat-note-pin, .cmt-add-floating')) return;
+    _hidePopover();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') { _hidePopover(); _hideFloatingAdd(); }
+  });
 }
 
 function renderSummary(data) {
@@ -972,7 +1331,28 @@ function renderSummary(data) {
 }
 
 function attachViewerHandlers(id, root, beats) {
+  setupCommentSelection();
+
   root.addEventListener('click', e => {
+    // Click on a highlight → open its comment popover.
+    const hl = e.target.closest('.cmt-highlight');
+    if (hl) {
+      e.stopPropagation();
+      const cid = +hl.dataset.cid;
+      _openExistingPopover([cid], hl.getBoundingClientRect());
+      return;
+    }
+    // Click on a beat-level legacy pin → open all beat-level comments here.
+    const pin = e.target.closest('.beat-note-pin');
+    if (pin) {
+      e.stopPropagation();
+      const beatIdx = +pin.dataset.beatPin;
+      const cids = Object.values(_commentsCache)
+        .filter(c => c.beat_index === beatIdx && !c.field && !c.resolved)
+        .map(c => c.id);
+      _openExistingPopover(cids, pin.getBoundingClientRect());
+      return;
+    }
     // Seek
     const seekEl = e.target.closest('[data-seek]');
     if (seekEl) {
@@ -982,177 +1362,15 @@ function attachViewerHandlers(id, root, beats) {
       window._player?.seek(t);
       return;
     }
-    // Comment toggle
-    const tog = e.target.closest('.comment-toggle');
-    if (tog) {
-      const panel = $(`#cmt-${tog.dataset.toggle}`);
-      panel.hidden = !panel.hidden;
-      return;
-    }
-    // Comment delete
-    const del = e.target.closest('.comment-del');
-    if (del) {
-      e.stopPropagation();
-      if (!confirm('Delete this note?')) return;
-      api(`/api/comments/${del.dataset.cid}`, { method: 'DELETE' })
-        .then(() => {
-          _cacheInvalidate(id);
-          del.closest('.comment').remove();
-          updateCommentCounts(root);
-          toast('Note deleted', 'success');
-        })
-        .catch(err => toast(`Delete failed: ${err.message}`, 'error'));
-      return;
-    }
-    // Comment edit (enter edit mode)
-    const editBtn = e.target.closest('.comment-edit');
-    if (editBtn) {
-      e.stopPropagation();
-      enterCommentEditMode(editBtn.closest('.comment'));
-      return;
-    }
-    // Comment edit — save
-    const saveBtn = e.target.closest('.comment-save');
-    if (saveBtn) {
-      e.stopPropagation();
-      saveCommentEdit(saveBtn.closest('.comment'), root);
-      return;
-    }
-    // Comment edit — cancel
-    const cancelBtn = e.target.closest('.comment-cancel');
-    if (cancelBtn) {
-      e.stopPropagation();
-      exitCommentEditMode(cancelBtn.closest('.comment'));
-      return;
-    }
-    // Beat card click → seek to its start (continuous play)
+    // Beat card click → seek to its start. Skip while a text selection
+    // exists, otherwise users can't select text without seeking.
     const beatEl = e.target.closest('.beat');
-    if (beatEl && !e.target.closest('.comment-block')) {
+    if (beatEl && window.getSelection().isCollapsed) {
       const start = parseFloat(beatEl.dataset.start) || 0;
-      // Always update highlight immediately, even if player isn't ready yet
       try { window._highlight?.(start); } catch { /* */ }
       window._player?.seek(start);
     }
   });
-
-  // Comment forms (delegated submit)
-  root.addEventListener('submit', async e => {
-    const form = e.target.closest('.comment-form');
-    if (!form) return;
-    e.preventDefault();
-    const idx = +form.dataset.form;
-    const fd = new FormData(form);
-    const body = (fd.get('body') || '').toString().trim();
-    if (!body) return;
-    const author = (fd.get('author') || '').toString().trim();
-    try {
-      const r = await api(`/api/results/${id}/comments`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ beat_index: idx, body, author }),
-      });
-      _cacheInvalidate(id);
-      // Optimistic insert
-      const list = form.parentElement.querySelector('.comment-list');
-      if (list.querySelector('.comment-empty')) list.innerHTML = '';
-      const html = `
-        <div class="comment" data-cid="${r.id}">
-          <div class="comment-head">
-            <span class="comment-author">${esc(author || 'Anonymous')}</span>
-            <span class="comment-time">just now</span>
-            <button class="comment-del" data-cid="${r.id}" title="Delete">✕</button>
-          </div>
-          <div class="comment-body">${esc(body)}</div>
-        </div>`;
-      list.insertAdjacentHTML('beforeend', html);
-      form.reset();
-      updateCommentCounts(root);
-    } catch (err) {
-      toast(`Could not post note: ${err.message}`, 'error');
-    }
-  });
-}
-
-function updateCommentCounts(root) {
-  $$('.comment-block', root).forEach(block => {
-    const count = $$('.comment', block).length;
-    const tog = $('.comment-toggle', block);
-    tog.textContent = count === 0
-      ? '💬 Add note'
-      : `💬 ${count} note${count === 1 ? '' : 's'}`;
-  });
-}
-
-function enterCommentEditMode(commentEl) {
-  if (!commentEl || commentEl.classList.contains('comment--editing')) return;
-  commentEl.classList.add('comment--editing');
-  const bodyEl = $('.comment-body', commentEl);
-  const original = bodyEl.dataset.original ?? bodyEl.textContent;
-  bodyEl.dataset.original = original;
-  bodyEl.innerHTML = `
-    <textarea class="comment-edit-input" rows="2">${esc(original)}</textarea>
-    <div class="comment-edit-actions">
-      <button type="button" class="btn-primary btn-small comment-save">Save</button>
-      <button type="button" class="link-btn comment-cancel">Cancel</button>
-    </div>`;
-  const ta = $('.comment-edit-input', commentEl);
-  ta.focus();
-  ta.setSelectionRange(ta.value.length, ta.value.length);
-  // Submit on Cmd/Ctrl+Enter
-  ta.addEventListener('keydown', (ev) => {
-    if ((ev.metaKey || ev.ctrlKey) && ev.key === 'Enter') {
-      ev.preventDefault();
-      saveCommentEdit(commentEl, document);
-    } else if (ev.key === 'Escape') {
-      ev.preventDefault();
-      exitCommentEditMode(commentEl);
-    }
-  });
-}
-
-function exitCommentEditMode(commentEl) {
-  if (!commentEl) return;
-  commentEl.classList.remove('comment--editing');
-  const bodyEl = $('.comment-body', commentEl);
-  const original = bodyEl.dataset.original ?? '';
-  bodyEl.textContent = original;
-}
-
-async function saveCommentEdit(commentEl, root) {
-  if (!commentEl) return;
-  const cid = commentEl.dataset.cid;
-  const ta = $('.comment-edit-input', commentEl);
-  if (!ta) return;
-  const next = ta.value.trim();
-  if (!next) {
-    toast('Note can\'t be empty', 'error');
-    return;
-  }
-  ta.disabled = true;
-  try {
-    await api(`/api/comments/${cid}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ body: next }),
-    });
-    // Invalidate the cached copy of whichever analysis we're viewing so the
-    // edited body is fetched fresh next time.
-    const h = window.location.hash;
-    if (h.startsWith('#/view/')) _cacheInvalidate(h.slice('#/view/'.length));
-    const bodyEl = $('.comment-body', commentEl);
-    bodyEl.dataset.original = next;
-    commentEl.classList.remove('comment--editing');
-    bodyEl.textContent = next;
-    // mark as edited
-    let timeEl = $('.comment-time', commentEl);
-    if (timeEl && !timeEl.textContent.includes('edited')) {
-      timeEl.textContent = `${timeEl.textContent} · edited`;
-    }
-    toast('Note updated', 'success');
-  } catch (err) {
-    ta.disabled = false;
-    toast(`Update failed: ${err.message}`, 'error');
-  }
 }
 
 // ── Player setup ─────────────────────────────────────────────────────────────
@@ -1377,6 +1595,22 @@ async function boot() {
       await api('/api/logout', { method: 'POST' });
     } catch { /* */ }
     window.location.href = '/login';
+  });
+
+  // ── Sidebar collapse toggle (state persists across reloads) ────────────────
+  const SIDEBAR_KEY = 'sidebar-collapsed';
+  const shell = document.querySelector('.app-shell');
+  const toggleBtn = $('#sidebar-toggle');
+  const applySidebarState = (collapsed) => {
+    shell.classList.toggle('sidebar-collapsed', collapsed);
+    toggleBtn.textContent = collapsed ? '☰' : '✕';
+    toggleBtn.title = collapsed ? 'Show sidebar' : 'Hide sidebar';
+  };
+  applySidebarState(localStorage.getItem(SIDEBAR_KEY) === '1');
+  toggleBtn.addEventListener('click', () => {
+    const next = !shell.classList.contains('sidebar-collapsed');
+    localStorage.setItem(SIDEBAR_KEY, next ? '1' : '0');
+    applySidebarState(next);
   });
 
   await Promise.all([refreshHistory(), refreshStorage()]);

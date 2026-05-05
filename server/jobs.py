@@ -257,7 +257,7 @@ def _run(job_id: str):
         # 1. Acquire video file
         _set_progress(job_id, stage='downloading', progress=5,
                       message='Loading video from source...')
-        video_path, title = get_video(a['source_url'])
+        video_path, title, _meta = get_video(a['source_url'])
         storage.update_analysis(job_id, title=title)
 
         target_video = folder / 'video.mp4'
