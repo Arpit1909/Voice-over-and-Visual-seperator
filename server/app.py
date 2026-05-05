@@ -1,20 +1,34 @@
 """FastAPI application: routes, video streaming, exports, comments, history."""
 import json
 import re
+import secrets
 from pathlib import Path
+from urllib.parse import quote
 
 from fastapi import (
     Depends, FastAPI, File, Form, HTTPException, Request, Response, UploadFile,
 )
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.sessions import SessionMiddleware
 
 from . import auth, jobs, storage
 from .config import (
-    ANALYSES_DIR, APP_USERNAME, MAX_UPLOAD_BYTES, SESSION_MAX_AGE,
+    ALLOWED_DOMAIN, ANALYSES_DIR, MAX_UPLOAD_BYTES,
+    SESSION_HTTPS_ONLY, SESSION_MAX_AGE, SESSION_SECRET,
 )
 
 app = FastAPI(title='VO and Visual Extractor', docs_url=None, redoc_url=None)
+
+# Signed-cookie session storage. Survives PM2 restarts (in-memory dicts don't).
+# `secret_key` MUST be set in production — used to sign the session cookie.
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=SESSION_SECRET or secrets.token_urlsafe(32),
+    max_age=SESSION_MAX_AGE,
+    same_site='lax',
+    https_only=SESSION_HTTPS_ONLY,
+)
 
 storage.init_db()
 storage.mark_orphan_jobs_failed()
@@ -43,42 +57,79 @@ async def root(request: Request):
     return FileResponse(STATIC_DIR / page, headers=_NOCACHE)
 
 
-@app.get('/login')
-async def login_page():
-    return FileResponse(STATIC_DIR / 'login.html', headers=_NOCACHE)
-
-
 # ── Auth ──────────────────────────────────────────────────────────────────────
 
 @app.get('/api/me')
 async def api_me(request: Request):
+    user = auth.get_user(request)
     return {
         "authenticated": auth.is_authenticated(request),
         "auth_required": auth.auth_enabled(),
-        "username": APP_USERNAME if auth.is_authenticated(request) and auth.auth_enabled() else None,
+        "user": user,
     }
 
 
-@app.post('/api/login')
-async def api_login(username: str = Form(...), password: str = Form(...)):
-    token = auth.login(username, password)
-    if token is False:
-        raise HTTPException(401, "Invalid username or password")
-    response = JSONResponse({"ok": True, "auth_disabled": token is None})
-    if token:
-        response.set_cookie(
-            'session', token, httponly=True, samesite='lax',
-            max_age=SESSION_MAX_AGE, path='/',
+@app.get('/login')
+async def login(request: Request):
+    """Start the Google OAuth flow. Unauthenticated users land here from the
+    "Sign in with Google" button on the login page."""
+    if not auth.auth_enabled():
+        return RedirectResponse('/')
+    if auth.is_authenticated(request):
+        return RedirectResponse('/')
+    state = secrets.token_urlsafe(24)
+    request.session['oauth_state'] = state
+    return RedirectResponse(auth.build_google_auth_url(state))
+
+
+@app.get('/auth/callback')
+async def auth_callback(
+    request: Request,
+    code: str | None = None,
+    state: str | None = None,
+    error: str | None = None,
+):
+    """Google redirects the user back here after sign-in."""
+    if error:
+        return RedirectResponse(f'/?error={quote(error)}')
+    if not code:
+        raise HTTPException(400, "Missing authorization code")
+
+    expected_state = request.session.pop('oauth_state', None)
+    if not expected_state or state != expected_state:
+        raise HTTPException(400, "Invalid OAuth state (possible CSRF). Try signing in again.")
+
+    try:
+        tokens = auth.exchange_code(code)
+        if 'id_token' not in tokens:
+            raise HTTPException(401, "Google did not return an id_token")
+        info = auth.verify_id_token(tokens['id_token'])
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(401, f"Failed to verify Google sign-in: {e}")
+
+    email = info.get('email', '')
+    hd = info.get('hd')
+    if not auth.domain_ok(email, hd):
+        msg = (
+            f"Account {email or '(unknown)'} is not authorized. "
+            f"Only @{ALLOWED_DOMAIN} accounts can sign in."
         )
-    return response
+        return RedirectResponse(f'/?error={quote(msg)}')
+
+    request.session['user'] = {
+        'email': email,
+        'name': info.get('name', email),
+        'picture': info.get('picture', ''),
+    }
+    return RedirectResponse('/')
 
 
 @app.post('/api/logout')
 async def api_logout(request: Request):
-    auth.logout(request.cookies.get('session'))
-    response = JSONResponse({"ok": True})
-    response.delete_cookie('session', path='/')
-    return response
+    request.session.clear()
+    return {"ok": True}
 
 
 # ── History + storage ────────────────────────────────────────────────────────

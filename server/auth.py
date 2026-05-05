@@ -1,27 +1,44 @@
-"""Simple shared-password auth via signed cookie."""
-import secrets
-from threading import Lock
+"""Google Workspace OAuth sign-in — restricted to a single domain.
 
+Auth is enabled when GOOGLE_OAUTH_CLIENT_ID + SECRET are set in `.env`.
+When enabled, only accounts whose hosted-domain (`hd` claim) or email
+domain matches ALLOWED_DOMAIN can sign in. The signed-in user dict is
+stored in `request.session["user"]` by Starlette's SessionMiddleware
+(signed-cookie based, survives PM2 restarts).
+"""
+from urllib.parse import urlencode
+
+import requests
 from fastapi import HTTPException, Request
+from google.auth.transport import requests as google_requests
+from google.oauth2 import id_token as id_token_lib
 
-from .config import APP_PASSWORD, APP_USERNAME
+from .config import (
+    ALLOWED_DOMAIN, GOOGLE_OAUTH_CLIENT_ID, GOOGLE_OAUTH_CLIENT_SECRET,
+    GOOGLE_OAUTH_REDIRECT_URI,
+)
 
-_sessions: set[str] = set()
-_lock = Lock()
+AUTH_URI = "https://accounts.google.com/o/oauth2/v2/auth"
+TOKEN_URI = "https://oauth2.googleapis.com/token"
+SCOPES = "openid email profile"
 
 
 def auth_enabled() -> bool:
-    return bool(APP_PASSWORD)
+    """OAuth is active only when both client ID and secret are configured."""
+    return bool(GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET)
+
+
+def get_user(request: Request) -> dict | None:
+    """Return the signed-in user dict, or None."""
+    return request.session.get("user")
 
 
 def is_authenticated(request: Request) -> bool:
     if not auth_enabled():
+        # If OAuth isn't configured, treat everyone as authenticated so the
+        # app still runs in dev. Production MUST configure OAuth.
         return True
-    token = request.cookies.get('session')
-    if not token:
-        return False
-    with _lock:
-        return token in _sessions
+    return get_user(request) is not None
 
 
 def require_auth(request: Request):
@@ -29,20 +46,49 @@ def require_auth(request: Request):
         raise HTTPException(status_code=401, detail="Not authenticated")
 
 
-def login(username: str, password: str):
-    """Return token on success, False on bad creds, None if auth disabled."""
-    if not auth_enabled():
-        return None
-    if username != APP_USERNAME or password != APP_PASSWORD:
-        return False
-    token = secrets.token_urlsafe(32)
-    with _lock:
-        _sessions.add(token)
-    return token
+def domain_ok(email: str, hd: str | None) -> bool:
+    """Allow when ALLOWED_DOMAIN matches `hd` claim or the email suffix."""
+    if not ALLOWED_DOMAIN:
+        return True
+    if hd and str(hd).lower() == ALLOWED_DOMAIN:
+        return True
+    return email.lower().endswith("@" + ALLOWED_DOMAIN)
 
 
-def logout(token: str | None):
-    if not token:
-        return
-    with _lock:
-        _sessions.discard(token)
+def build_google_auth_url(state: str) -> str:
+    params = {
+        "client_id": GOOGLE_OAUTH_CLIENT_ID,
+        "redirect_uri": GOOGLE_OAUTH_REDIRECT_URI,
+        "response_type": "code",
+        "scope": SCOPES,
+        "access_type": "online",
+        "prompt": "select_account",
+        "state": state,
+    }
+    if ALLOWED_DOMAIN:
+        # `hd` is a hint to Google to restrict the account chooser to one
+        # Workspace domain. We re-verify on the server side too.
+        params["hd"] = ALLOWED_DOMAIN
+    return AUTH_URI + "?" + urlencode(params)
+
+
+def exchange_code(code: str) -> dict:
+    r = requests.post(
+        TOKEN_URI,
+        data={
+            "code": code,
+            "client_id": GOOGLE_OAUTH_CLIENT_ID,
+            "client_secret": GOOGLE_OAUTH_CLIENT_SECRET,
+            "redirect_uri": GOOGLE_OAUTH_REDIRECT_URI,
+            "grant_type": "authorization_code",
+        },
+        timeout=30,
+    )
+    r.raise_for_status()
+    return r.json()
+
+
+def verify_id_token(token_str: str) -> dict:
+    return id_token_lib.verify_oauth2_token(
+        token_str, google_requests.Request(), audience=GOOGLE_OAUTH_CLIENT_ID
+    )
