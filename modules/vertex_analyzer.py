@@ -115,6 +115,14 @@ ALL timestamps strict HH:MM:SS format. Hours is "00" for clips under 60 minutes.
 vo.timestamp_start/end = EXACT time the narrator's voice starts/stops.
 visual.timestamp_start/end = EXACT time the footage shot starts/ends.
 
+ZERO-DURATION BEATS ARE FORBIDDEN:
+  - timestamp_start MUST be strictly less than timestamp_end (minimum 1-second span).
+  - NEVER output two beats that share identical timestamp_start AND timestamp_end values.
+  - If you don't know the EXACT timing of a beat, OMIT it entirely. Do NOT invent or
+    guess timestamps. Do NOT collapse multiple narrator sentences onto a single instant.
+  - Each narration beat's vo.timestamp_start/end must reflect when the narrator is
+    actually speaking those specific words — not the surrounding visual range.
+
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 BEAT TYPES — SUMMARY
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -244,7 +252,7 @@ def upload_video(video_path: str, bucket_name: str, progress_cb=None) -> str:
 
 CHUNK_MINUTES      = 8     # minutes per clip segment (smaller = less token pressure, more detail)
 CHUNK_THRESHOLD    = 600   # seconds — videos longer than this get clipped & chunked
-CHUNK_WORKERS      = 1     # sequential to avoid 404/quota collisions on parallel calls
+CHUNK_WORKERS      = 3     # parallel — Gemini retries handle 429s/404s with backoff
 CHUNK_MAX_TOKENS   = 65536 # output tokens per chunk — upper bound
 GAP_THRESHOLD_SECS = 90    # re-analyze any coverage gap larger than this
 MIN_BEATS_PER_MIN  = 2.5   # if under-density detected, split clip and retry
@@ -261,6 +269,7 @@ def run_gemini(gcs_uri: str, project_id: str, location: str = "us-central1",
     if duration_secs > 0:
         data = _fix_timestamps(data, duration_secs)
     data['sections'] = _sanitize_vo_beats(data.get('sections', []))
+    data['sections'] = _merge_stacked_narrations(data.get('sections', []))
     return data
 
 
@@ -338,6 +347,7 @@ def _analyze_clip_adaptively(video_path: str, start_s: float, end_s: float,
 
         data = _fix_timestamps(data, clip_secs)
         data['sections'] = _sanitize_vo_beats(data.get('sections', []))
+        data['sections'] = _merge_stacked_narrations(data.get('sections', []))
         return _offset_timestamps(data, start_s)
     finally:
         if uri:
@@ -360,11 +370,15 @@ def _combine_two_clip_results(a: dict, b: dict) -> dict:
 
 
 def analyze_video_chunked(video_path: str, project_id: str, bucket_name: str,
-                          location: str, duration_secs: float) -> dict:
+                          location: str, duration_secs: float,
+                          on_chunk_done=None) -> dict:
     """
     Long-video pipeline: clip → upload → analyze → adaptively split under-detailed clips → merge.
     Each Gemini call sees only its own short clip starting at 00:00, eliminating
     cross-chunk timestamp confusion from seeing the full video.
+
+    `on_chunk_done(idx, total, chunk_data)` is called from the worker thread after each
+    main chunk finishes, so callers can stream live partial results.
     """
     chunk_secs = CHUNK_MINUTES * 60
     chunks: list[tuple[float, float]] = []
@@ -376,7 +390,7 @@ def analyze_video_chunked(video_path: str, project_id: str, bucket_name: str,
 
     n = len(chunks)
     print(f"  {duration_secs / 60:.1f} min video → {n} clips × {CHUNK_MINUTES} min  "
-          f"[adaptive subdivision: up to {MAX_SPLIT_DEPTH} levels deep]")
+          f"[adaptive subdivision: up to {MAX_SPLIT_DEPTH} levels deep, {CHUNK_WORKERS} parallel workers]")
 
     ordered: list[dict | None] = [None] * n
 
@@ -388,6 +402,15 @@ def analyze_video_chunked(video_path: str, project_id: str, bucket_name: str,
             clip_tag=f"{i:02d}", depth=0
         )
 
+    def _emit(idx: int, chunk_data: dict):
+        if on_chunk_done is None:
+            return
+        try:
+            on_chunk_done(idx, n, chunk_data)
+        except Exception as cb_err:
+            # Never let a UI/storage callback take down the worker.
+            print(f"  on_chunk_done callback raised: {cb_err}")
+
     if CHUNK_WORKERS == 1:
         for i in range(n):
             if i > 0:
@@ -395,12 +418,14 @@ def analyze_video_chunked(video_path: str, project_id: str, bucket_name: str,
                 time.sleep(30)
             idx, chunk_data = _process(i)
             ordered[idx] = chunk_data
+            _emit(idx, chunk_data)
     else:
         with ThreadPoolExecutor(max_workers=min(CHUNK_WORKERS, n)) as pool:
             futures = {pool.submit(_process, i): i for i in range(n)}
             for fut in as_completed(futures):
                 idx, chunk_data = fut.result()
                 ordered[idx] = chunk_data
+                _emit(idx, chunk_data)
 
     # ── Merge ordered results ─────────────────────────────────────────────────
     all_sections:   list = []
@@ -462,6 +487,7 @@ def analyze_video_chunked(video_path: str, project_id: str, bucket_name: str,
                 gap_data = _weave_tracks_into_beats(gap_data)
                 gap_data = _fix_timestamps(gap_data, gap_secs)
                 gap_data['sections'] = _sanitize_vo_beats(gap_data.get('sections', []))
+                gap_data['sections'] = _merge_stacked_narrations(gap_data.get('sections', []))
                 gap_data = _offset_timestamps(gap_data, gs)
 
                 gap_beats = [b for s in gap_data.get('sections', []) for b in s.get('beats', [])]
@@ -492,6 +518,9 @@ def analyze_video_chunked(video_path: str, project_id: str, bucket_name: str,
     # ── Step 5: Final cleanup — merge fragments across chunk boundaries, detect ad reads ──
     merged['sections'] = _merge_fragment_continuations(merged['sections'])
     merged['sections'] = _detect_ad_reads(merged['sections'])
+    # Final defense: collapse any stacked narration that survived the per-clip pass
+    # (e.g. cross-clip duplicates introduced by gap-fill).
+    merged['sections'] = _merge_stacked_narrations(merged['sections'])
 
     return merged
 
@@ -686,6 +715,11 @@ def _fix_timestamps(data: dict, max_secs: float) -> dict:
     Correct timestamps where Gemini used MM:SS:00 instead of HH:MM:SS.
     E.g. "01:57:00" (meant 1 min 57 sec) gets corrected to "00:01:57".
     Only touches timestamps that exceed max_secs AND have a non-zero hours field.
+
+    Hallucinated timestamps that overshoot the clip and can't be reinterpreted
+    are returned as '' (empty) so the caller can drop or rescue the beat —
+    we no longer clamp to clip-end (which used to collapse multiple beats
+    onto the same timestamp and stack them visibly).
     """
     tolerance = max_secs * 1.05  # allow 5% over (rounding at end of segment)
 
@@ -704,8 +738,8 @@ def _fix_timestamps(data: dict, max_secs: float) -> dict:
                     return _secs_to_ts(int(reinterp))
             except Exception:
                 pass
-        # If hours=00 but value still exceeds clip, clamp to clip end
-        return _secs_to_ts(int(max_secs))
+        # Hallucinated past clip end — signal "drop me" with empty string
+        return ''
 
     data = copy.deepcopy(data)
     for sec in data.get('sections', []):
@@ -726,19 +760,33 @@ def _fix_timestamps(data: dict, max_secs: float) -> dict:
                     e_sec = _ts_str_to_secs(e_ts)
                     if e_sec < s_sec:
                         obj['timestamp_end'] = s_ts
+
+            bt = beat.get('beat_type', 'narration')
+            vo_obj = beat.get('vo', {}) or {}
+            vis_obj = beat.get('visual', {}) or {}
+
+            # Narration / ad_read with empty or zero-duration VO timestamps
+            # is a hallucinated beat — its anchor in time is unreliable.
+            # Drop it and let gap-fill recover the span if it's real content.
+            if bt in ('narration', 'ad_read'):
+                vs = vo_obj.get('timestamp_start', '')
+                ve = vo_obj.get('timestamp_end', '')
+                if not vs or not ve or vs == ve:
+                    continue
+
             # Drop beats with no timestamp info at all
             has_ts = (
-                beat.get('vo', {}).get('timestamp_start')
-                or beat.get('vo', {}).get('timestamp_end')
-                or beat.get('visual', {}).get('timestamp_start')
-                or beat.get('visual', {}).get('timestamp_end')
+                vo_obj.get('timestamp_start')
+                or vo_obj.get('timestamp_end')
+                or vis_obj.get('timestamp_start')
+                or vis_obj.get('timestamp_end')
             )
             if not has_ts:
                 continue
             # Drop beats that start beyond the clip (hallucinated timestamps)
             beat_s = _ts_str_to_secs(
-                beat.get('vo', {}).get('timestamp_start', '')
-                or beat.get('visual', {}).get('timestamp_start', '')
+                vo_obj.get('timestamp_start', '')
+                or vis_obj.get('timestamp_start', '')
                 or '00:00:00'
             )
             if beat_s <= max_secs * 1.05:
@@ -748,6 +796,53 @@ def _fix_timestamps(data: dict, max_secs: float) -> dict:
         if pm.get('timestamp'):
             pm['timestamp'] = _fix(pm['timestamp'])
     return data
+
+
+def _merge_stacked_narrations(sections: list) -> list:
+    """
+    Defense-in-depth pass: any narration / ad_read beats that share an
+    identical (timestamp_start, timestamp_end) tuple get their text
+    concatenated into the first occurrence and the rest dropped.
+
+    This catches Gemini hallucinations that survived `_fix_timestamps`
+    (e.g. multiple beats with identical valid-looking timestamps from a
+    clip boundary). Without this pass the user sees N visibly stacked
+    beats at the same time code.
+    """
+    for sec in sections:
+        beats = sec.get('beats') or []
+        if not beats:
+            continue
+        keep: list[dict] = []
+        # Map (start, end, type) -> index into keep[] so we can find peers
+        peer_idx: dict[tuple, int] = {}
+
+        for beat in beats:
+            bt = beat.get('beat_type', 'narration')
+            if bt not in ('narration', 'ad_read'):
+                keep.append(beat)
+                continue
+            vo = beat.get('vo') or {}
+            vs = vo.get('timestamp_start', '')
+            ve = vo.get('timestamp_end', '')
+            if not vs or not ve:
+                keep.append(beat)
+                continue
+            key = (vs, ve, bt)
+            if key in peer_idx:
+                # Concatenate this beat's text onto the previous twin
+                prev = keep[peer_idx[key]]
+                prev_text = ((prev.get('vo') or {}).get('text') or '').strip()
+                cur_text = (vo.get('text') or '').strip()
+                if cur_text and cur_text not in prev_text:
+                    combined = (prev_text + ' ' + cur_text).strip() if prev_text else cur_text
+                    prev.setdefault('vo', {})['text'] = combined
+                # Drop this duplicate beat
+                continue
+            peer_idx[key] = len(keep)
+            keep.append(beat)
+        sec['beats'] = keep
+    return sections
 
 
 def _merge_fragment_continuations(sections: list) -> list:
