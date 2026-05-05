@@ -101,6 +101,37 @@ function showView(name) {
 let _viewerCleanup = null;
 let _jobPoll = null;
 
+// Tracks the most recent viewer load so concurrent loads can detect
+// staleness when the user rapid-clicks between history cards.
+let _viewerLoadToken = 0;
+
+// Tiny LRU cache of analyses already fetched in this session, keyed by id.
+// Eliminates network + JSON parse latency when re-opening a recent analysis.
+const _analysisCache = new Map();
+const _ANALYSIS_CACHE_MAX = 6;
+
+function _cacheGet(id) {
+  if (!_analysisCache.has(id)) return null;
+  const entry = _analysisCache.get(id);
+  // Refresh recency
+  _analysisCache.delete(id);
+  _analysisCache.set(id, entry);
+  return entry;
+}
+
+function _cacheSet(id, entry) {
+  if (_analysisCache.has(id)) _analysisCache.delete(id);
+  _analysisCache.set(id, entry);
+  while (_analysisCache.size > _ANALYSIS_CACHE_MAX) {
+    const first = _analysisCache.keys().next().value;
+    _analysisCache.delete(first);
+  }
+}
+
+function _cacheInvalidate(id) {
+  _analysisCache.delete(id);
+}
+
 function clearTimers() {
   if (_jobPoll) { clearInterval(_jobPoll); _jobPoll = null; }
   if (_viewerCleanup) { _viewerCleanup(); _viewerCleanup = null; }
@@ -199,6 +230,7 @@ async function refreshHistory() {
         if (!confirm(`Delete "${title}"?\n\nThis removes the video, analysis, and all comments from the server. This cannot be undone.`)) return;
         try {
           await api(`/api/history/${id}`, { method: 'DELETE' });
+          _cacheInvalidate(id);
           toast('Analysis deleted', 'success');
           await Promise.all([refreshHistory(), refreshStorage()]);
           // If we were viewing the deleted one, go home
@@ -368,9 +400,42 @@ async function openJobView(id) {
 }
 
 // ── Viewer ───────────────────────────────────────────────────────────────────
+function _showViewerLoadingState(id) {
+  // Wipe stale content so the user gets instant visual feedback on click,
+  // even before the network response arrives.
+  $('#viewer-title').textContent = 'Loading…';
+  $('#viewer-meta').innerHTML =
+    '<span class="viewer-loading-pill">Fetching analysis…</span>';
+  const root = $('#viewer-script');
+  if (root) {
+    root.innerHTML = `
+      <div class="viewer-skeleton" data-id="${esc(id)}">
+        <div class="skeleton-line skeleton-line--lg"></div>
+        <div class="skeleton-line skeleton-line--md"></div>
+        <div class="skeleton-line skeleton-line--md"></div>
+        <div class="skeleton-line skeleton-line--sm"></div>
+      </div>`;
+  }
+}
+
 async function openViewer(id) {
+  // Bump the load token so any in-flight openViewer call for a previous id
+  // can detect that it's now stale and bail out before touching the DOM.
+  const token = ++_viewerLoadToken;
+
   showView('viewer');
   highlightHistory(id);
+
+  // Fast path: cache hit — paint immediately, skip network entirely.
+  const cached = _cacheGet(id);
+  if (cached) {
+    if (token !== _viewerLoadToken) return;
+    _renderViewer(id, cached.payload, cached.comments, token);
+    return;
+  }
+
+  // Cache miss: show loading state right now so the click feels instant.
+  _showViewerLoadingState(id);
 
   let payload, comments;
   try {
@@ -379,6 +444,7 @@ async function openViewer(id) {
       api(`/api/results/${id}/comments`),
     ]);
   } catch (e) {
+    if (token !== _viewerLoadToken) return; // user already navigated away
     if (e.message.includes('not complete')) {
       toast('Analysis is still running', 'info');
       return navigate(`#/job/${id}`);
@@ -387,6 +453,13 @@ async function openViewer(id) {
     return navigate('#/new');
   }
 
+  if (token !== _viewerLoadToken) return; // a newer click won — abort
+  _cacheSet(id, { payload, comments });
+  _renderViewer(id, payload, comments, token);
+}
+
+function _renderViewer(id, payload, comments, token) {
+  if (token !== _viewerLoadToken) return;
   const meta = payload.meta;
   const data = payload.data;
 
@@ -404,6 +477,7 @@ async function openViewer(id) {
     if (!confirm(`Delete "${data.title || meta.title}"?\nThis removes the video, analysis, and all comments. Cannot be undone.`)) return;
     try {
       await api(`/api/history/${id}`, { method: 'DELETE' });
+      _cacheInvalidate(id);
       toast('Deleted', 'success');
       await Promise.all([refreshHistory(), refreshStorage()]);
       navigate('#/new');
@@ -654,6 +728,7 @@ function attachViewerHandlers(id, root, beats) {
       if (!confirm('Delete this note?')) return;
       api(`/api/comments/${del.dataset.cid}`, { method: 'DELETE' })
         .then(() => {
+          _cacheInvalidate(id);
           del.closest('.comment').remove();
           updateCommentCounts(root);
           toast('Note deleted', 'success');
@@ -708,6 +783,7 @@ function attachViewerHandlers(id, root, beats) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ beat_index: idx, body, author }),
       });
+      _cacheInvalidate(id);
       // Optimistic insert
       const list = form.parentElement.querySelector('.comment-list');
       if (list.querySelector('.comment-empty')) list.innerHTML = '';
