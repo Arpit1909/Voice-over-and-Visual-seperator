@@ -54,46 +54,60 @@
     <!-- View: New analysis -->
     <section class="view view-new" data-view="new" hidden>
       <header class="view-header">
-        <h1>New Analysis</h1>
-        <p>Submit a YouTube link or upload a local video. Maximum length: 60 minutes.</p>
+        <span class="eyebrow">Step 1 — Video source</span>
+        <h1>New analysis</h1>
+        <p>Submit a YouTube link or upload a local video. Maximum length 60 minutes.</p>
       </header>
 
       <div class="card submit-card">
-        <div class="tabs">
-          <button class="tab-btn active" data-tab="url">YouTube URL</button>
-          <button class="tab-btn" data-tab="file">Upload file</button>
+        <div class="tabs" role="tablist">
+          <button class="tab-btn active" data-tab="url" role="tab" aria-selected="true">YouTube URL</button>
+          <button class="tab-btn" data-tab="file" role="tab" aria-selected="false">Upload file</button>
         </div>
 
-        <div class="tab-pane" data-tab="url">
-          <label class="field">
-            <span>YouTube URL</span>
-            <input type="url" id="yt-url" placeholder="https://www.youtube.com/watch?v=..." autocomplete="off">
-          </label>
-          <button class="btn-primary submit-btn" id="submit-url">Analyze video</button>
+        <div class="tab-pane" data-tab="url" role="tabpanel">
+          <div class="card-body">
+            <label class="field">
+              <span class="field-label">YouTube link</span>
+              <input type="url" id="yt-url" placeholder="https://www.youtube.com/watch?v=..." autocomplete="off">
+            </label>
+          </div>
+          <div class="card-footer">
+            <span class="footer-hint">Long videos (10+ min) take a few minutes to analyze.</span>
+            <button class="btn-primary" id="submit-url">Analyze video</button>
+          </div>
         </div>
 
-        <div class="tab-pane" data-tab="file" hidden>
-          <label class="field upload-zone" id="upload-zone">
-            <input type="file" id="file-input" accept="video/*,.mp4,.mov,.mkv,.avi,.webm,.flv,.wmv,.mpg,.mpeg,.3gp,.m4v" hidden>
-            <div class="upload-content">
-              <div class="upload-icon">⬆</div>
-              <div class="upload-title" id="upload-title">Click or drag a video here</div>
-              <div class="upload-meta">MP4 · MOV · MKV · WebM · AVI &nbsp;·&nbsp; up to 5 GB</div>
-            </div>
-          </label>
-          <button class="btn-primary submit-btn" id="submit-file" disabled>Upload &amp; analyze</button>
+        <div class="tab-pane" data-tab="file" role="tabpanel" hidden>
+          <div class="card-body">
+            <label class="field upload-zone" id="upload-zone">
+              <input type="file" id="file-input" accept="video/*,.mp4,.mov,.mkv,.avi,.webm,.flv,.wmv,.mpg,.mpeg,.3gp,.m4v" hidden>
+              <div class="upload-content">
+                <div class="upload-icon" aria-hidden="true">⬆</div>
+                <div class="upload-title" id="upload-title">Click or drag a video here</div>
+                <div class="upload-meta">MP4 · MOV · MKV · WebM · AVI &nbsp;·&nbsp; up to 5 GB</div>
+              </div>
+            </label>
+          </div>
+          <div class="card-footer">
+            <span class="footer-hint">Files are streamed directly to disk &mdash; nothing is buffered in memory.</span>
+            <button class="btn-primary" id="submit-file" disabled>Upload &amp; analyze</button>
+          </div>
         </div>
 
         <div class="submit-error" id="submit-error" hidden></div>
       </div>
 
       <div class="card hint-card">
-        <h3>What you'll get</h3>
+        <div class="hint-head">
+          <h3>What you'll get</h3>
+          <span class="hint-pill">5 outputs</span>
+        </div>
         <ul>
-          <li><strong>VO column</strong> — every line the off-camera narrator says, with exact timestamps.</li>
-          <li><strong>Visual column</strong> — what's on screen, including on-camera dialogue and audio cues.</li>
+          <li><strong>VO column</strong> &mdash; every line the off-camera narrator says, with exact timestamps.</li>
+          <li><strong>Visual column</strong> &mdash; what's on screen, including on-camera dialogue and audio cues.</li>
           <li><strong>Continuous video player</strong> with karaoke-style row highlighting as the video plays.</li>
-          <li><strong>Threaded comments</strong> on every beat — collaborate with your team.</li>
+          <li><strong>Threaded comments</strong> on every beat &mdash; collaborate with your team.</li>
           <li><strong>One-click exports</strong> to PDF, DOCX, TXT, or self-contained HTML.</li>
         </ul>
       </div>
