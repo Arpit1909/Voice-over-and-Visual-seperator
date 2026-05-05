@@ -217,6 +217,18 @@ async def api_job(analysis_id: str, _: None = Depends(auth.require_auth)):
     return {**a, "progress": jobs.get_progress(analysis_id)}
 
 
+@app.get('/api/jobs/{analysis_id}/logs')
+async def api_job_logs(
+    analysis_id: str, since: int = 0,
+    _: None = Depends(auth.require_auth),
+):
+    """Live tail of the analyzer's stdout for this job.
+    Pass `?since=<seq>` to fetch only lines newer than the last seq seen."""
+    if not storage.get_analysis(analysis_id):
+        raise HTTPException(404, "Not found")
+    return jobs.get_logs(analysis_id, since=since)
+
+
 # ── Result data ───────────────────────────────────────────────────────────────
 
 @app.get('/api/results/{analysis_id}/data')
@@ -228,6 +240,24 @@ async def api_data(analysis_id: str, _: None = Depends(auth.require_auth)):
     if not data_path.exists():
         raise HTTPException(404, "Analysis is not complete yet")
     with open(data_path, 'r', encoding='utf-8') as f:
+        result = json.load(f)
+    return {"meta": a, "data": result}
+
+
+@app.get('/api/results/{analysis_id}/partial')
+async def api_partial(
+    analysis_id: str, _: None = Depends(auth.require_auth),
+):
+    """Streaming preview while analysis is still running.
+    Returns an incomplete dataset assembled from chunks that have finished so far.
+    Final data.json supersedes this — viewers should switch back to /data when status='done'."""
+    a = storage.get_analysis(analysis_id)
+    if not a:
+        raise HTTPException(404, "Not found")
+    partial_path = ANALYSES_DIR / analysis_id / 'partial.json'
+    if not partial_path.exists():
+        raise HTTPException(404, "No partial data yet")
+    with open(partial_path, 'r', encoding='utf-8') as f:
         result = json.load(f)
     return {"meta": a, "data": result}
 

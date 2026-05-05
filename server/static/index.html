@@ -96,6 +96,23 @@
         </div>
 
         <div class="submit-error" id="submit-error" hidden></div>
+
+        <div class="submit-progress" id="submit-progress" hidden>
+          <div class="submit-progress-stage" id="submit-progress-stage">Uploading…</div>
+          <div class="submit-progress-bar">
+            <div class="submit-progress-fill" id="submit-progress-fill"></div>
+          </div>
+          <div class="submit-progress-meta">
+            <span id="submit-progress-pct">0%</span>
+            <span class="submit-progress-dot" id="submit-progress-dot1" hidden>·</span>
+            <span id="submit-progress-bytes"></span>
+            <span class="submit-progress-dot" id="submit-progress-dot2" hidden>·</span>
+            <span id="submit-progress-speed"></span>
+          </div>
+          <div class="submit-progress-hint" id="submit-progress-hint">
+            Streaming to the server — keep this tab open until upload completes.
+          </div>
+        </div>
       </div>
 
       <div class="card hint-card">
@@ -134,6 +151,39 @@
         <div id="job-actions" class="job-actions" hidden>
           <button class="btn-primary" id="job-open">Open results →</button>
         </div>
+      </div>
+
+      <div class="card log-card" id="log-card">
+        <header class="log-header">
+          <div class="log-title">
+            <span class="log-pill">Analyzer logs</span>
+            <span class="log-meta" id="log-meta">waiting…</span>
+          </div>
+          <div class="log-controls">
+            <label class="log-autoscroll" title="Stick to the bottom as new lines arrive">
+              <input type="checkbox" id="log-autoscroll" checked>
+              <span>Follow</span>
+            </label>
+            <button class="link-btn" id="log-clear" title="Clear visible log">Clear</button>
+          </div>
+        </header>
+        <div class="log-body" id="log-body">
+          <div class="log-empty">Waiting for output…</div>
+        </div>
+      </div>
+
+      <div class="card live-preview-card" id="live-preview" hidden>
+        <header class="live-preview-header">
+          <div class="live-preview-title">
+            <span class="live-preview-dot"></span>
+            <span class="live-preview-pill">Live preview</span>
+          </div>
+          <span class="live-preview-meta" id="live-preview-meta">—</span>
+        </header>
+        <div class="live-preview-banner">
+          Beats appear here as each clip finishes. A few may shift slightly when the final pass merges sentence fragments and reclassifies sponsor reads.
+        </div>
+        <div class="live-preview-list" id="live-preview-list"></div>
       </div>
     </section>
 

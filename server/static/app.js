@@ -313,20 +313,135 @@ function showSubmitError(msg) {
   setTimeout(() => { el.hidden = true; }, 6000);
 }
 
+function uploadWithProgress(path, fd, onProgress) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', path);
+    xhr.withCredentials = true;
+    xhr.responseType = 'text';
+    if (onProgress && xhr.upload) {
+      xhr.upload.addEventListener('progress', e => {
+        if (e.lengthComputable) onProgress(e.loaded, e.total);
+      });
+    }
+    xhr.onload = () => {
+      if (xhr.status === 401) {
+        window.location.href = '/login';
+        return reject(new Error('unauthorized'));
+      }
+      let body = null;
+      try { body = JSON.parse(xhr.responseText); } catch { /* */ }
+      if (xhr.status >= 200 && xhr.status < 300) return resolve(body);
+      reject(new Error((body && body.detail) || `HTTP ${xhr.status}`));
+    };
+    xhr.onerror = () => reject(new Error('Network error during upload'));
+    xhr.onabort = () => reject(new Error('Upload cancelled'));
+    xhr.send(fd);
+  });
+}
+
+function showSubmitProgress({ stage, determinate, hint }) {
+  $('#submit-error').hidden = true;
+  const card = $('.submit-card');
+  card.classList.add('submit-card--uploading');
+  $('#submit-progress').hidden = false;
+  $('#submit-progress-stage').textContent = stage;
+  $('#submit-progress-hint').textContent = hint || '';
+  $('#submit-progress-hint').hidden = !hint;
+
+  const fill = $('#submit-progress-fill');
+  fill.classList.toggle('submit-progress-fill--indet', !determinate);
+  fill.classList.remove('submit-progress-fill--err');
+  fill.style.width = determinate ? '0%' : '';
+
+  $('#submit-progress-pct').textContent = determinate ? '0%' : '';
+  $('#submit-progress-bytes').textContent = '';
+  $('#submit-progress-speed').textContent = '';
+  $('#submit-progress-dot1').hidden = !determinate;
+  $('#submit-progress-dot2').hidden = !determinate;
+}
+
+function updateSubmitProgress(loaded, total, startedAt) {
+  const pct = total ? (loaded / total) * 100 : 0;
+  $('#submit-progress-fill').style.width = `${pct.toFixed(1)}%`;
+  $('#submit-progress-pct').textContent = `${pct.toFixed(0)}%`;
+  $('#submit-progress-bytes').textContent = total
+    ? `${fmtBytes(loaded)} / ${fmtBytes(total)}`
+    : fmtBytes(loaded);
+
+  const elapsed = (performance.now() - startedAt) / 1000;
+  if (elapsed > 0.5 && loaded > 0) {
+    const speed = loaded / elapsed;
+    let etaTxt = '';
+    if (total && speed > 0) {
+      const eta = (total - loaded) / speed;
+      if (eta > 1) etaTxt = ` · ${fmtDuration(eta)} left`;
+    }
+    $('#submit-progress-speed').textContent = `${fmtBytes(speed)}/s${etaTxt}`;
+  }
+}
+
+function setSubmitProgressDone(stage) {
+  $('#submit-progress-stage').textContent = stage;
+  const fill = $('#submit-progress-fill');
+  fill.classList.remove('submit-progress-fill--indet');
+  fill.style.width = '100%';
+  $('#submit-progress-pct').textContent = '100%';
+  $('#submit-progress-speed').textContent = '';
+}
+
+function hideSubmitProgress() {
+  $('.submit-card').classList.remove('submit-card--uploading');
+  $('#submit-progress').hidden = true;
+  $('#submit-progress-fill').classList.remove('submit-progress-fill--indet', 'submit-progress-fill--err');
+}
+
 async function submitJob({ url, file }) {
   $('#submit-error').hidden = true;
-  const btns = $$('.submit-btn');
+  const btns = $$('#submit-url, #submit-file');
   btns.forEach(b => b.disabled = true);
+
+  const fd = new FormData();
+  if (url) fd.append('url', url);
+  if (file) fd.append('file', file);
+
+  if (file) {
+    showSubmitProgress({
+      stage: 'Uploading video…',
+      determinate: true,
+      hint: 'Streaming to the server — keep this tab open until upload completes.',
+    });
+  } else {
+    showSubmitProgress({
+      stage: 'Submitting…',
+      determinate: false,
+      hint: 'Sending request to the analyzer.',
+    });
+  }
+
+  const startedAt = performance.now();
+
   try {
-    const fd = new FormData();
-    if (url) fd.append('url', url);
-    if (file) fd.append('file', file);
-    const r = await api('/api/analyze', { method: 'POST', body: fd });
+    const r = await uploadWithProgress('/api/analyze', fd, file
+      ? (loaded, total) => updateSubmitProgress(loaded, total, startedAt)
+      : null);
+
+    if (file) {
+      setSubmitProgressDone('Upload complete — starting analysis…');
+    } else {
+      setSubmitProgressDone('Submitted — starting analysis…');
+    }
+
     toast('Analysis started', 'success');
     refreshHistory();
     refreshStorage();
-    navigate(`#/job/${r.id}`);
+
+    setTimeout(() => {
+      hideSubmitProgress();
+      navigate(`#/job/${r.id}`);
+    }, file ? 600 : 200);
   } catch (e) {
+    hideSubmitProgress();
     showSubmitError(e.message);
   } finally {
     btns.forEach(b => b.disabled = false);
@@ -349,7 +464,23 @@ async function openJobView(id) {
   const actionsEl = $('#job-actions');
   $('#job-open').onclick = () => navigate(`#/view/${id}`);
 
+  // Reset live preview each time we open a job
+  $('#live-preview').hidden = true;
+  $('#live-preview-list').innerHTML = '';
+  $('#live-preview-meta').textContent = '—';
+
+  // Reset analyzer log panel
+  $('#log-body').innerHTML = '<div class="log-empty">Waiting for output…</div>';
+  $('#log-meta').textContent = 'waiting…';
+  $('#log-clear').onclick = () => {
+    $('#log-body').innerHTML = '<div class="log-empty">Cleared. New lines will appear below.</div>';
+  };
+
   let lastStatus = null;
+  let lastPartialFetch = 0;
+  let renderedBeatCount = 0;
+  let lastLogSeq = 0;
+  let lastLogFetch = 0;
 
   async function poll() {
     try {
@@ -365,6 +496,21 @@ async function openJobView(id) {
       stageEl.textContent = stage;
       fillEl.style.width = `${Math.min(100, p.progress || 0)}%`;
       msgEl.textContent = p.message || '—';
+
+      // While analyzing, fetch the streaming preview every ~4s
+      if (j.status === 'running' && p.stage === 'analyzing'
+          && Date.now() - lastPartialFetch > 4000) {
+        lastPartialFetch = Date.now();
+        fetchPartial(id);
+      }
+
+      // Always poll logs (even before analysis starts — download stage too).
+      // 1.5s while running/queued, slower after job ends.
+      const logIntervalMs = (j.status === 'queued' || j.status === 'running') ? 1500 : 6000;
+      if (Date.now() - lastLogFetch > logIntervalMs) {
+        lastLogFetch = Date.now();
+        fetchLogs(id);
+      }
 
       if (j.status === 'done') {
         actionsEl.hidden = false;
@@ -395,8 +541,130 @@ async function openJobView(id) {
     }
   }
 
+  async function fetchPartial(jobId) {
+    let payload;
+    try {
+      const r = await fetch(`/api/results/${jobId}/partial`, { credentials: 'same-origin' });
+      if (!r.ok) return;             // 404 until first chunk completes
+      payload = await r.json();
+    } catch { return; }
+    if (!payload || !payload.data) return;
+
+    const data = payload.data;
+    const beats = (data.sections || []).flatMap((s, si) =>
+      (s.beats || []).map((b, bi) => ({
+        beat: b,
+        section: s.title || '',
+        sectionIdx: si,
+        beatIdx: bi,
+      }))
+    );
+    if (!beats.length) return;
+    if (beats.length === renderedBeatCount) return;  // nothing new
+
+    const card = $('#live-preview');
+    const list = $('#live-preview-list');
+    const meta = $('#live-preview-meta');
+
+    const wasNearBottom = (list.scrollHeight - list.scrollTop - list.clientHeight) < 80;
+
+    card.hidden = false;
+    meta.textContent = `${beats.length} beats · clip ${data._chunks_done || 0}/${data._chunks_total || '?'} done`;
+    list.innerHTML = beats.map(entry => renderLiveBeat(entry)).join('');
+    renderedBeatCount = beats.length;
+
+    if (wasNearBottom) list.scrollTop = list.scrollHeight;
+  }
+
+  async function fetchLogs(jobId) {
+    let payload;
+    try {
+      const r = await fetch(`/api/jobs/${jobId}/logs?since=${lastLogSeq}`,
+                            { credentials: 'same-origin' });
+      if (!r.ok) return;
+      payload = await r.json();
+    } catch { return; }
+    if (!payload) return;
+
+    const newLines = payload.lines || [];
+    if (!newLines.length) return;
+    lastLogSeq = payload.seq || lastLogSeq;
+
+    const body = $('#log-body');
+    const empty = body.querySelector('.log-empty');
+    if (empty) empty.remove();
+
+    const followEl = $('#log-autoscroll');
+    const stickyBottom = followEl.checked
+      || (body.scrollHeight - body.scrollTop - body.clientHeight < 60);
+
+    const html = newLines.map(({ seq, ts, line }) => {
+      const cls = classifyLogLine(line);
+      const t = new Date(ts * 1000);
+      const stamp = `${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}:${String(t.getSeconds()).padStart(2, '0')}`;
+      return `<div class="log-line ${cls}" data-seq="${seq}"><span class="log-line-ts">${stamp}</span><span class="log-line-text">${esc(line)}</span></div>`;
+    }).join('');
+    body.insertAdjacentHTML('beforeend', html);
+
+    // Cap the rendered DOM at the latest 800 lines to keep things snappy
+    const lines = body.querySelectorAll('.log-line');
+    if (lines.length > 800) {
+      for (let i = 0; i < lines.length - 800; i++) lines[i].remove();
+    }
+
+    $('#log-meta').textContent = `${lastLogSeq} line${lastLogSeq === 1 ? '' : 's'}`;
+    if (stickyBottom) body.scrollTop = body.scrollHeight;
+  }
+
   await poll();
   _jobPoll = setInterval(poll, 1500);
+}
+
+function classifyLogLine(line) {
+  const s = line || '';
+  if (/^ERROR\b|\bexception\b|\btraceback\b/i.test(s)) return 'log-line--err';
+  if (/✓|complete\b|\bdone\b|saved|filled with \d+ beats/i.test(s)) return 'log-line--ok';
+  if (/⚠|warning\b|cooling down|rate limit|retrying|under-density|JSON repaired/i.test(s)) return 'log-line--warn';
+  if (/===\s*Clip\s+\d+/i.test(s) || /^\s*Clip\s+\d+\/\d+/i.test(s) || /Trying model:/i.test(s)) return 'log-line--info';
+  if (/^\s*Gap\s+\d+\/\d+|coverage gap/i.test(s)) return 'log-line--info';
+  return '';
+}
+
+function renderLiveBeat({ beat, section }) {
+  const vo = beat.vo || {};
+  const viz = beat.visual || {};
+  const ts = vo.timestamp_start || viz.timestamp_start || '';
+  const beatType = beat.beat_type || 'narration';
+  const typeLabel = ({
+    narration: 'VO',
+    visual_only: 'VIS',
+    ad_read: 'AD',
+  })[beatType] || 'VO';
+
+  let text = '';
+  if (beatType === 'narration' || beatType === 'ad_read') {
+    text = vo.text || viz.description || '';
+  } else {
+    text = viz.description || '';
+    const dlg = (viz.dialogue || []).filter(d => d && d.quote);
+    if (dlg.length) {
+      const first = dlg[0];
+      text = `${first.speaker || 'Speaker'}: "${first.quote}"` + (dlg.length > 1 ? ` (+${dlg.length - 1} more)` : '');
+    }
+  }
+  const truncated = text.length > 220 ? text.slice(0, 220) + '…' : text;
+  const sectionTag = section
+    ? `<span class="live-beat-section" title="Section">${esc(section)}</span>` : '';
+
+  return `
+    <div class="live-beat live-beat--${esc(beatType)}">
+      <span class="live-beat-ts">${esc(ts || '—')}</span>
+      <span class="live-beat-type live-beat-type--${esc(beatType)}">${typeLabel}</span>
+      <div class="live-beat-body">
+        ${sectionTag}
+        <span class="live-beat-text">${esc(truncated) || '<em class="muted">(no text)</em>'}</span>
+      </div>
+    </div>`;
 }
 
 // ── Viewer ───────────────────────────────────────────────────────────────────
@@ -867,6 +1135,10 @@ async function saveCommentEdit(commentEl, root) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ body: next }),
     });
+    // Invalidate the cached copy of whichever analysis we're viewing so the
+    // edited body is fetched fresh next time.
+    const h = window.location.hash;
+    if (h.startsWith('#/view/')) _cacheInvalidate(h.slice('#/view/'.length));
     const bodyEl = $('.comment-body', commentEl);
     bodyEl.dataset.original = next;
     commentEl.classList.remove('comment--editing');
