@@ -1,0 +1,53 @@
+# ── Secrets / credentials ───────────────────────────────────────────────
+# Never commit these.
+.env
+.env.*
+!.env.example
+credentials/
+*.pem
+*.key
+.auth_token.json
+
+# ── Python ──────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# ── Virtual environments ────────────────────────────────────────────────
+.venv/
+.venv-linux/
+venv/
+env/
+ENV/
+
+# ── App runtime data ────────────────────────────────────────────────────
+# Server-managed analysis storage (videos, SQLite index, exports)
+data/
+# Legacy CLI output (kept for backwards compatibility)
+output/
+# Legacy upload staging from the old flat webapp
+.uploads/
+# Gemini raw response dumps (debug artifacts)
+gemini_raw_output.txt
+*.raw_output.txt
+
+# ── Build / packaging ───────────────────────────────────────────────────
+build/
+dist/
+*.egg-info/
+
+# ── Tooling / IDE ───────────────────────────────────────────────────────
+.claude/
+.vscode/
+.idea/
+*.swp
+
+# ── State files ─────────────────────────────────────────────────────────
+.last_sync
+.setup_done
+
+# ── OS ──────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db

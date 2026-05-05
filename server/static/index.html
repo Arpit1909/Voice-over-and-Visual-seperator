@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VO and Visual Extractor</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+
+<div class="app-shell">
+
+  <!-- ── Sidebar ─────────────────────────────────────────────────────────── -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <div class="brand">
+        <div class="brand-mark small">VS</div>
+        <div class="brand-text">
+          <div class="brand-name">VO and Visual Extractor</div>
+          <div class="brand-tagline">Vertex AI · Gemini 2.5</div>
+        </div>
+      </div>
+    </div>
+
+    <button class="btn-primary new-btn" id="new-btn">
+      <span class="btn-icon">+</span> New Analysis
+    </button>
+
+    <div class="storage-card" id="storage-card">
+      <div class="storage-row">
+        <span class="storage-label">Storage</span>
+        <span class="storage-amount" id="storage-amount">— GB</span>
+      </div>
+      <div class="storage-bar"><div class="storage-fill" id="storage-fill"></div></div>
+      <div class="storage-foot" id="storage-foot">Loading…</div>
+    </div>
+
+    <div class="history-header">
+      <span>History</span>
+      <button class="link-btn" id="refresh-btn" title="Refresh">↻</button>
+    </div>
+    <div class="history-list" id="history-list">
+      <div class="history-empty">Loading…</div>
+    </div>
+
+    <div class="sidebar-footer">
+      <button class="link-btn" id="logout-btn">Sign out</button>
+    </div>
+  </aside>
+
+  <!-- ── Main content area, swappable views ──────────────────────────────── -->
+  <main class="main-area" id="main-area">
+
+    <!-- View: New analysis -->
+    <section class="view view-new" data-view="new" hidden>
+      <header class="view-header">
+        <h1>New Analysis</h1>
+        <p>Submit a YouTube link or upload a local video. Maximum length: 60 minutes.</p>
+      </header>
+
+      <div class="card submit-card">
+        <div class="tabs">
+          <button class="tab-btn active" data-tab="url">YouTube URL</button>
+          <button class="tab-btn" data-tab="file">Upload file</button>
+        </div>
+
+        <div class="tab-pane" data-tab="url">
+          <label class="field">
+            <span>YouTube URL</span>
+            <input type="url" id="yt-url" placeholder="https://www.youtube.com/watch?v=..." autocomplete="off">
+          </label>
+          <button class="btn-primary submit-btn" id="submit-url">Analyze video</button>
+        </div>
+
+        <div class="tab-pane" data-tab="file" hidden>
+          <label class="field upload-zone" id="upload-zone">
+            <input type="file" id="file-input" accept="video/*,.mp4,.mov,.mkv,.avi,.webm,.flv,.wmv,.mpg,.mpeg,.3gp,.m4v" hidden>
+            <div class="upload-content">
+              <div class="upload-icon">⬆</div>
+              <div class="upload-title" id="upload-title">Click or drag a video here</div>
+              <div class="upload-meta">MP4 · MOV · MKV · WebM · AVI &nbsp;·&nbsp; up to 5 GB</div>
+            </div>
+          </label>
+          <button class="btn-primary submit-btn" id="submit-file" disabled>Upload &amp; analyze</button>
+        </div>
+
+        <div class="submit-error" id="submit-error" hidden></div>
+      </div>
+
+      <div class="card hint-card">
+        <h3>What you'll get</h3>
+        <ul>
+          <li><strong>VO column</strong> — every line the off-camera narrator says, with exact timestamps.</li>
+          <li><strong>Visual column</strong> — what's on screen, including on-camera dialogue and audio cues.</li>
+          <li><strong>Continuous video player</strong> with karaoke-style row highlighting as the video plays.</li>
+          <li><strong>Threaded comments</strong> on every beat — collaborate with your team.</li>
+          <li><strong>One-click exports</strong> to PDF, DOCX, TXT, or self-contained HTML.</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- View: Job progress -->
+    <section class="view view-job" data-view="job" hidden>
+      <header class="view-header">
+        <h1 id="job-title">Analyzing video…</h1>
+        <p id="job-source"></p>
+      </header>
+
+      <div class="card progress-card">
+        <div class="progress-stage" id="progress-stage">Queued</div>
+        <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+        <div class="progress-message" id="progress-message">Waiting for worker…</div>
+
+        <div class="progress-detail">
+          <div><span>Status:</span><strong id="job-status">queued</strong></div>
+          <div><span>Duration:</span><strong id="job-duration">—</strong></div>
+          <div><span>Started:</span><strong id="job-started">—</strong></div>
+        </div>
+
+        <div id="job-actions" class="job-actions" hidden>
+          <button class="btn-primary" id="job-open">Open results →</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- View: Viewer (results) -->
+    <section class="view view-viewer" data-view="viewer" hidden>
+      <header class="viewer-header">
+        <div class="viewer-title-block">
+          <h1 id="viewer-title">—</h1>
+          <div class="viewer-meta" id="viewer-meta"></div>
+        </div>
+        <div class="viewer-actions">
+          <button class="btn-ghost" id="viewer-share" title="Copy a link your team can open">🔗 Share link</button>
+          <div class="export-group">
+            <button class="btn-ghost" data-export="html">HTML</button>
+            <button class="btn-ghost" data-export="pdf">PDF</button>
+            <button class="btn-ghost" data-export="docx">DOCX</button>
+            <button class="btn-ghost" data-export="txt">TXT</button>
+          </div>
+          <button class="btn-danger" id="viewer-delete">Delete</button>
+        </div>
+      </header>
+
+      <div class="viewer-layout">
+        <div class="viewer-script-pane" id="viewer-script">
+          <!-- beats injected here -->
+        </div>
+
+        <aside class="viewer-player-pane">
+          <div class="player-card">
+            <div class="player-card-header">
+              <span>▶ Video Player</span>
+              <span class="player-hint">Click any beat to seek · plays continuously</span>
+            </div>
+            <div class="player-wrap" id="player-wrap">
+              <!-- video or yt iframe injected here -->
+            </div>
+            <div class="player-footer">
+              <div><span class="muted">Time:</span> <strong id="cur-time">00:00</strong></div>
+              <div><span class="muted">Beat:</span> <strong id="cur-beat">—</strong></div>
+              <label class="autoplay-toggle" title="Auto-scroll the script to the playing beat">
+                <input type="checkbox" id="autoscroll" checked>
+                <span>Auto-scroll</span>
+              </label>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <!-- Toast container -->
+    <div class="toast-stack" id="toast-stack"></div>
+
+  </main>
+</div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sign in — VO and Visual Extractor</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body class="login-body">
+  <div class="login-card">
+    <div class="login-brand">
+      <div class="brand-mark">VS</div>
+      <div>
+        <h1>VO and Visual Extractor</h1>
+        <p>Sign in to access your team workspace</p>
+      </div>
+    </div>
+
+    <form id="login-form" class="login-form" autocomplete="on">
+      <label>
+        <span>Username</span>
+        <input type="text" name="username" autocomplete="username" required autofocus>
+      </label>
+      <label>
+        <span>Password</span>
+        <input type="password" name="password" autocomplete="current-password" required>
+      </label>
+      <div id="login-error" class="login-error" hidden></div>
+      <button type="submit" class="btn-primary">Sign in</button>
+    </form>
+
+    <p class="login-foot">Powered by Vertex AI Gemini · YouTube &amp; local video support</p>
+  </div>
+
+  <script>
+    const form = document.getElementById('login-form');
+    const errEl = document.getElementById('login-error');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      errEl.hidden = true;
+      const fd = new FormData(form);
+      try {
+        const r = await fetch('/api/login', { method: 'POST', body: fd });
+        if (!r.ok) {
+          const j = await r.json().catch(() => ({}));
+          throw new Error(j.detail || 'Invalid credentials');
+        }
+        // Force a fresh navigation even when the URL hasn't changed.
+        window.location.replace('/?_=' + Date.now());
+      } catch (err) {
+        errEl.textContent = err.message;
+        errEl.hidden = false;
+      }
+    });
+  </script>
+</body>
+</html>
