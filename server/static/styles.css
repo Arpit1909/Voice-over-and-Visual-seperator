@@ -1680,13 +1680,21 @@ body.player-resizing * {
 .vis-col { /* right edge of table — no extra border */ }
 .vo-col:hover, .vis-col:hover { background: rgba(20,20,18,.025); }
 
-/* Active row — subtle copper inset on both cells + a 2px ribbon along the
-   top of the VO cell so the active row reads as 'selected' without flooding
-   it with color. */
+/* Active row — bold copper highlight so the now-playing beat is easy to
+   spot from across the room. Stronger bg tint, plus 2px copper ribbons on
+   the top and bottom edges of both cells, plus a gentle pulse animation
+   so it actively draws the eye. */
 .beat--active .vo-col,
 .beat--active .vis-col {
-  background: rgba(184, 90, 57, 0.045);
-  box-shadow: inset 0 2px 0 var(--accent);
+  background: rgba(184, 90, 57, 0.14);
+  box-shadow:
+    inset 0  2px 0 var(--accent),
+    inset 0 -2px 0 var(--accent);
+  animation: nowPlayingGlow 2.4s ease-in-out infinite;
+}
+@keyframes nowPlayingGlow {
+  0%, 100% { background-color: rgba(184, 90, 57, 0.12); }
+  50%      { background-color: rgba(184, 90, 57, 0.22); }
 }
 
 .col-header {
