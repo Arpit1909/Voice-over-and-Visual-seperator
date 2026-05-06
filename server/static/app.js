@@ -943,9 +943,9 @@ function renderBeat(entry, idx, allBeats, comments) {
   const summaryText = renderHighlighted(viz.summary || '', byField['summary']);
 
   const ost = (viz.on_screen_text && !['NONE', 'N/A'].includes(String(viz.on_screen_text).toUpperCase()))
-    ? `<div class="viz-meta"><span class="viz-label">On-screen text</span><span class="viz-val" data-comment-field="ost">${ostText}</span></div>` : '';
+    ? `<div class="viz-meta viz-meta--ost"><span class="viz-label">On-screen:</span><span class="viz-val" data-comment-field="ost">${ostText}</span></div>` : '';
   const audio = viz.audio_notes
-    ? `<div class="viz-meta"><span class="viz-label">Audio</span><span class="viz-val" data-comment-field="audio">${audioText}</span></div>` : '';
+    ? `<div class="viz-meta viz-meta--audio"><span class="viz-label">Audio:</span><span class="viz-val" data-comment-field="audio">${audioText}</span></div>` : '';
   const summary = viz.summary
     ? `<div class="viz-summary"><span data-comment-field="summary">${summaryText}</span></div>` : '';
 
@@ -961,10 +961,10 @@ function renderBeat(entry, idx, allBeats, comments) {
     ? `<div class="dialogue-block"><div class="dlg-label">On-camera dialogue</div>${dialogueRows}</div>` : '';
 
   const voBadge = voS
-    ? `<span class="ts-badge ts-seek" data-seek="${startSec}" title="Seek to ${esc(voS)}">▶ ${esc(voS)}${voE ? ' – ' + esc(voE) : ''}</span>`
-    : `<span class="ts-badge ts-empty">No VO</span>`;
+    ? `<span class="ts-badge ts-seek" data-seek="${startSec}" title="Seek to ${esc(voS)}">[${esc(voS)}${voE ? ' – ' + esc(voE) : ''}]</span>`
+    : `<span class="ts-badge ts-empty">—</span>`;
   const visBadge = vS
-    ? `<span class="ts-badge ts-seek vis-ts-seek" data-seek="${tsToSec(vS)}" title="Seek to ${esc(vS)}">▶ ${esc(vS)}${vE ? ' – ' + esc(vE) : ''}</span>`
+    ? `<span class="ts-badge ts-seek vis-ts-seek" data-seek="${tsToSec(vS)}" title="Seek to ${esc(vS)}">(${esc(vS)}${vE ? ' – ' + esc(vE) : ''})</span>`
     : `<span class="ts-badge ts-empty">—</span>`;
 
   const sectionHeader = sectionFirst ? `

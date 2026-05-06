@@ -1376,7 +1376,7 @@ body::before {
   box-shadow: var(--shadow-sm);
 }
 
-/* Sticky header row at the top of the table — VO | Visuals labels in copper. */
+/* Sticky header row — same warm-pink banner as the PDF export. */
 .script-table-head {
   grid-column: 1 / -1;
   display: grid;
@@ -1384,37 +1384,46 @@ body::before {
   position: sticky;
   top: 0;
   z-index: 4;
-  background: var(--accent-soft);
-  border-bottom: 1px solid var(--accent-line);
+  background: #f4b8b8;
+  border-bottom: 1px solid #d99696;
 }
 .script-table-head-cell {
-  font-family: var(--font-display);
-  font-size: 13px;
-  font-weight: 500;
-  letter-spacing: 0.04em;
-  color: var(--accent);
-  text-transform: uppercase;
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: #1a1a1d;
   text-align: center;
-  padding: 10px 16px;
-  font-variation-settings: 'opsz' 18;
+  padding: 12px 16px;
 }
-.script-table-head-cell--vo  { border-right: 1px solid var(--accent-line); }
+.script-table-head-cell--vo  { border-right: 1px solid #d99696; }
 .script-table-head-cell--vis { /* no extra border */ }
 
-/* Section banner — full-width strip between groups of beats. */
+/* Section banner — gray strip across both columns, like the PDF. */
 .section-header {
   grid-column: 1 / -1;
   display: flex;
   align-items: baseline;
   gap: 14px;
-  padding: 12px 18px;
+  padding: 10px 18px;
   margin: 0;
-  background: var(--panel-soft);
+  background: #efeeea;
   border-top: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
   flex-wrap: wrap;
 }
 .section-header:first-of-type { border-top: none; }
+.section-header .section-number { display: none; }
+.section-header .section-title {
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0;
+  color: #4a4a52;
+  text-transform: none;
+  font-variation-settings: normal;
+}
+.section-header .section-meta { display: none; }
 .section-header:first-child { margin-top: 0; }
 .section-number {
   font-family: var(--font-mono);
@@ -1562,97 +1571,108 @@ body::before {
    row up top — hide it inside cells to mirror the PDF look. */
 .col-label { display: none; }
 
+/* Cell timestamp — plain bold colored text, no pill, matches the PDF. */
 .ts-badge {
   font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 500;
-  padding: 3px 10px;
-  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 0;
+  border: 0;
+  background: transparent;
   white-space: nowrap;
 }
-.vo-col  .ts-badge { background: var(--vo-bg); color: var(--vo-label); border: 1px solid var(--vo-border); }
-.vis-col .ts-badge { background: var(--vis-bg); color: var(--vis-label); border: 1px solid var(--vis-border); }
-.ts-empty { opacity: .35; cursor: default; }
-.ts-seek  { cursor: pointer; transition: background .12s, transform .1s, color .12s; }
+.vo-col  .ts-badge { color: #b85c1f; }   /* copper, like PDF */
+.vis-col .ts-badge { color: #1a7a3c; }   /* green,  like PDF */
+.ts-empty { opacity: .35; cursor: default; color: var(--text-3) !important; }
+.ts-seek  { cursor: pointer; transition: opacity .12s, text-decoration-color .12s; text-decoration: underline; text-decoration-color: transparent; }
 .ts-seek:hover {
-  background: var(--accent-soft) !important;
-  color: var(--accent) !important;
-  border-color: var(--accent-line) !important;
-  transform: scale(1.05);
-}
-.vis-ts-seek:hover {
-  background: var(--vis-bg) !important;
-  color: var(--vis-label) !important;
-  border-color: var(--vis-border) !important;
+  text-decoration-color: currentColor;
+  opacity: .82;
 }
 
 .col-content { flex: 1; min-width: 0; }
 
+/* Tone tag — italic copper text in brackets, like the PDF's [Informative]. */
 .tone-tag {
-  display: inline-block;
+  display: block;
   font-style: italic;
   font-family: var(--font-display);
-  font-size: 12px;
-  color: var(--accent);
-  background: var(--accent-soft);
-  padding: 3px 10px;
-  border-radius: 4px;
-  margin-bottom: 12px;
-  border: 1px solid var(--accent-line);
+  font-size: 12.5px;
+  color: #b85c1f;
+  background: transparent;
+  padding: 0;
+  margin: 4px 0 8px;
+  border: 0;
   font-variation-settings: 'opsz' 18;
 }
+.tone-tag::before { content: '['; }
+.tone-tag::after { content: ']'; }
 .vo-text {
-  font-family: var(--font-display);
-  font-size: clamp(14.5px, 0.4vw + 12px, 17px);
-  line-height: 1.7;
-  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: #1a1a1d;
   word-wrap: break-word;
   transition: background .25s;
-  font-variation-settings: 'opsz' 18;
-  font-weight: 380;
+  font-weight: 400;
+  margin: 0;
 }
 .vis-desc {
-  font-size: clamp(13.5px, 0.3vw + 12px, 15px);
-  line-height: 1.65;
-  color: var(--text);
-  margin-bottom: 12px;
+  font-family: var(--font-body);
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: #1a1a1d;
+  margin: 6px 0 0;
   word-wrap: break-word;
 }
 
+/* On-screen / Audio meta rows — inline like the PDF: bold label,
+   regular grey body, on a single line. */
 .viz-meta {
-  display: flex;
-  gap: 14px;
-  align-items: flex-start;
-  font-size: 12px;
-  padding: 10px 0;
-  border-top: 1px dashed var(--line);
+  display: block;
+  font-size: 12.5px;
+  line-height: 1.6;
+  margin-top: 6px;
+  border: 0;
+  padding: 0;
 }
-.viz-meta:first-of-type { border-top: none; padding-top: 4px; }
+.viz-meta:first-of-type { margin-top: 8px; }
 .viz-label {
-  font-family: var(--font-display);
-  font-weight: 500;
-  color: var(--text-3);
+  font-family: var(--font-body);
+  font-weight: 600;
   white-space: nowrap;
-  min-width: 100px;
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  padding-top: 1px;
-  font-variation-settings: 'opsz' 18;
+  font-size: 12.5px;
+  text-transform: none;
+  letter-spacing: 0;
+  padding: 0;
+  margin-right: 6px;
+  display: inline;
 }
-.viz-val { color: var(--text-2); word-wrap: break-word; line-height: 1.55; }
+.viz-val {
+  display: inline;
+  color: #4a4a52;
+  word-wrap: break-word;
+  line-height: 1.6;
+}
+/* PDF colours: red for On-screen, blue for Audio. */
+.viz-meta:has(> .viz-label):nth-of-type(1) .viz-label,
+[data-comment-field="ost"] ~ .viz-label,
+.vis-col .viz-meta .viz-label { color: #c25450; }
+/* Tag specific labels via attribute — see the JS markup. */
+.viz-meta--ost   .viz-label { color: #c25450; }
+.viz-meta--audio .viz-label { color: #1a56b0; }
 
 .viz-summary {
-  margin-top: 14px;
-  padding: 12px 16px;
-  background: var(--vis-bg);
-  border-left: 2px solid var(--vis-border);
-  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  margin-top: 12px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
   font-family: var(--font-display);
   font-size: 13px;
   font-style: italic;
-  color: var(--vis-label);
-  line-height: 1.6;
+  color: #1a7a3c;
+  line-height: 1.55;
   font-variation-settings: 'opsz' 18;
 }
 
