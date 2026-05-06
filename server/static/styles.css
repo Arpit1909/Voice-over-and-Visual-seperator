@@ -1447,21 +1447,10 @@ body::before {
 .beat {
   display: contents;
 }
-/* The Beat# / type / timestamp header strip is intentionally hidden — the
-   timestamp already appears at the top of each cell, the column header at
-   the top of the table tells you which side is VO vs Visuals, and the now-
-   playing state lights up the cells themselves. The strip just added noise. */
+/* The Beat#/type/timestamp header strip is hidden — those facts already
+   show at the top of each cell + in the column header at the top of the
+   table, and the now-playing state lights up the cells themselves. */
 .beat-head { display: none; }
-
-.beat-head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  padding: 0 4px 12px;
-  margin-bottom: 12px;
-  border-bottom: none;
-}
 .beat-head-spacer { flex: 1; }
 .beat-number-pill {
   display: inline-flex;

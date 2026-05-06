@@ -140,6 +140,18 @@ async def api_logout(request: Request):
     return {"ok": True}
 
 
+@app.get('/api/me')
+async def api_me(request: Request, _: None = Depends(auth.require_auth)):
+    """Return the signed-in user so the front-end can auto-fill comment
+    author and any future personalization. Empty dict when OAuth is off."""
+    user = auth.get_user(request) or {}
+    return {
+        'email':   user.get('email', ''),
+        'name':    user.get('name', '') or (user.get('email', '').split('@')[0] if user.get('email') else ''),
+        'picture': user.get('picture', ''),
+    }
+
+
 # ── History + storage ────────────────────────────────────────────────────────
 
 @app.get('/api/history')
@@ -458,7 +470,12 @@ async def api_comments_add(
         raise HTTPException(400, "Comment body is empty")
     if len(body) > 4000:
         raise HTTPException(400, "Comment exceeds 4000 characters")
+    # Fall back to the signed-in user's name when the client didn't send one,
+    # so every comment is attributed to a real person without manual entry.
     author = (payload.get('author') or '').strip()[:60]
+    if not author:
+        u = auth.get_user(request) or {}
+        author = (u.get('name') or u.get('email') or '').strip()[:60]
 
     field = _parse_field(payload.get('field'))
     quote = (payload.get('quote') or '').strip()[:2000] or None

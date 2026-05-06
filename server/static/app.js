@@ -1156,10 +1156,13 @@ function _buildPopover(rect) {
 
 function _openNewCommentPopover({ beatIdx, field, quote, start, end, anchorRect }) {
   const pop = _buildPopover(anchorRect);
+  // Pre-fill author from the signed-in user (fetched once into _me).
+  const defaultAuthor = (window._me && window._me.name) || '';
   pop.innerHTML = `
     <div class="cmt-pop-quote">${esc(quote)}</div>
     <form class="cmt-pop-form">
-      <input type="text" class="cmt-pop-author" placeholder="Your name (optional)" maxlength="60">
+      <input type="text" class="cmt-pop-author" placeholder="Your name"
+             maxlength="60" value="${esc(defaultAuthor)}">
       <textarea class="cmt-pop-body" placeholder="Add a comment…" rows="3" required></textarea>
       <div class="cmt-pop-actions">
         <button type="button" class="link-btn cmt-pop-cancel">Cancel</button>
@@ -1868,6 +1871,13 @@ async function boot() {
     localStorage.setItem(SIDEBAR_KEY, next ? '1' : '0');
     applySidebarState(next);
   });
+
+  // Fetch the signed-in user once so the comment popover can pre-fill author.
+  // Failure (e.g. auth disabled in dev) is fine — the popover falls back to
+  // an empty author and the server attributes anonymously.
+  try {
+    window._me = await api('/api/me');
+  } catch { window._me = null; }
 
   await Promise.all([refreshHistory(), refreshStorage()]);
   setInterval(refreshStorage, 30000);
