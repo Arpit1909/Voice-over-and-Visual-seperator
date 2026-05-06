@@ -875,6 +875,7 @@ function _renderViewer(id, payload, comments, token) {
     (commentsByBeat[c.beat_index] = commentsByBeat[c.beat_index] || []).push(c);
   }
   _indexComments(comments?.items);
+  _renderCommentsPanel(comments?.items || []);
   _currentAnalysisId = id;
   _startCommentsPoll(id);
 
@@ -1333,6 +1334,89 @@ function _patchCommentsInPlace(items) {
     const fieldComments = byBeatField[idx]?.[field] || [];
     const rawText = el.textContent; // <mark> children flatten to plain text
     el.innerHTML = renderHighlighted(rawText, fieldComments);
+  });
+
+  _renderCommentsPanel(items);
+}
+
+// ── Comments panel (sidebar list under the video player) ───────────────────
+// Lists every comment on the current analysis. Clicking a row scrolls to the
+// associated highlight and opens the existing popover. Resolved comments are
+// hidden by default; a toggle reveals them (visually muted).
+let _commentsPanelShowResolved = false;
+
+function _renderCommentsPanel(items) {
+  const panel    = document.getElementById('comments-panel');
+  const listEl   = document.getElementById('comments-panel-list');
+  const countEl  = document.getElementById('comments-panel-count');
+  const toggleEl = document.getElementById('comments-panel-toggle');
+  if (!panel || !listEl) return;
+
+  // First render only — wire the resolved-toggle once.
+  if (toggleEl && !toggleEl._wired) {
+    toggleEl._wired = true;
+    toggleEl.addEventListener('click', () => {
+      _commentsPanelShowResolved = !_commentsPanelShowResolved;
+      toggleEl.textContent = _commentsPanelShowResolved ? 'Hide resolved' : 'Show resolved';
+      toggleEl.setAttribute('aria-pressed', _commentsPanelShowResolved ? 'true' : 'false');
+      // Re-render with the latest cached items.
+      _renderCommentsPanel(Object.values(_commentsCache));
+    });
+  }
+
+  const live    = (items || []).filter(c => !c.resolved);
+  const visible = _commentsPanelShowResolved ? (items || []) : live;
+  if (countEl) countEl.textContent = String(live.length);
+
+  if (!visible.length) {
+    listEl.innerHTML = `<p class="comments-panel-empty">No comments yet. Select any text in a beat to add one.</p>`;
+    return;
+  }
+
+  // Newest first.
+  visible.sort((a, b) => (b.created_at || 0) - (a.created_at || 0));
+
+  listEl.innerHTML = visible.map(c => {
+    const quote   = c.quote ? `<div class="comments-panel-quote">"${esc(c.quote)}"</div>` : '';
+    const resCls  = c.resolved ? ' comments-panel-item--resolved' : '';
+    const resPill = c.resolved ? `<span class="comments-panel-resolved">resolved</span>` : '';
+    return `
+      <button class="comments-panel-item${resCls}" data-cid="${c.id}" type="button">
+        ${quote}
+        <div class="comments-panel-meta">
+          <span class="comments-panel-author">${esc(c.author || 'Anonymous')}</span>
+          <span class="comments-panel-time">${esc(fmtRel(c.created_at))}</span>
+          ${resPill}
+        </div>
+        <div class="comments-panel-body">${esc(c.body || '')}</div>
+      </button>`;
+  }).join('');
+
+  // Wire row clicks — find the matching highlight, scroll to it, open popover.
+  listEl.querySelectorAll('.comments-panel-item').forEach(btn => {
+    btn.addEventListener('click', () => _focusComment(parseInt(btn.dataset.cid, 10)));
+  });
+}
+
+function _focusComment(cid) {
+  if (!Number.isFinite(cid)) return;
+  // Try to find the anchored highlight first; fall back to the beat itself
+  // (legacy beat-level comment) so clicking is always useful.
+  const c = _commentsCache[cid];
+  if (!c) return;
+  const target = document.querySelector(`mark.cmt-highlight[data-cid="${cid}"]`)
+              || document.getElementById(`beat-${c.beat_index}`);
+  if (!target) return;
+
+  target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+  // Open the popover after the scroll so the popover anchors at the right
+  // viewport rect; rAF gives the browser one frame to paint the new scroll.
+  requestAnimationFrame(() => {
+    setTimeout(() => {
+      const rect = target.getBoundingClientRect();
+      _openExistingPopover([cid], rect);
+    }, 220); // matches typical smooth-scroll duration
   });
 }
 

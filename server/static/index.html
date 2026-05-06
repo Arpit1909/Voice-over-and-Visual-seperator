@@ -237,6 +237,21 @@
               </label>
             </div>
           </div>
+
+          <!-- Live-updating list of every comment on this analysis. Click a
+               row to scroll to its highlight and open the existing popover. -->
+          <section class="comments-panel" id="comments-panel" aria-label="Comments">
+            <header class="comments-panel-head">
+              <span class="comments-panel-title">Comments</span>
+              <span class="comments-panel-count" id="comments-panel-count">0</span>
+              <button class="link-btn comments-panel-toggle" id="comments-panel-toggle"
+                      type="button" aria-pressed="false"
+                      title="Show resolved comments too">Show resolved</button>
+            </header>
+            <div class="comments-panel-list" id="comments-panel-list">
+              <p class="comments-panel-empty">No comments yet. Select any text in a beat to add one.</p>
+            </div>
+          </section>
         </aside>
       </div>
     </section>
