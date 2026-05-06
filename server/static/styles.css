@@ -1153,13 +1153,19 @@ body::before {
 .export-group .btn-ghost + .btn-ghost { border-left: 1px solid var(--border); }
 .export-group .btn-ghost:hover { background: var(--accent-soft); color: var(--accent); }
 
+/* Two-column viewer:
+   - Script column gets a comfortable reading width (54ch ≈ 700px) so long
+     paragraphs don't sprawl across a wide screen.
+   - Whatever room is left after the script column goes to the player rail,
+     so the player automatically grows on bigger screens (laptop → 27" → 4K).
+   - Min width on the player rail is 420 px so it never gets cramped. */
 .viewer-layout {
-  max-width: 1800px;
-  margin: 0 auto;
+  max-width: none;
+  margin: 0;
   padding: clamp(18px, 2vw, 32px) clamp(20px, 3vw, 56px) 80px;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) clamp(400px, 34vw, 580px);
-  gap: clamp(20px, 2vw, 36px);
+  grid-template-columns: minmax(560px, 54ch) minmax(420px, 1fr);
+  gap: clamp(24px, 2.4vw, 44px);
   align-items: start;
 }
 .viewer-script-pane { min-width: 0; }
@@ -1179,6 +1185,12 @@ body::before {
 }
 .viewer-player-pane .player-card {
   max-height: calc(100vh - 36px);
+  /* Cap card width on truly enormous screens — past ~960 px the video itself
+     stops gaining detail and the script just feels smaller for no reason. */
+  max-width: 960px;
+  /* Hug the script column on the left; let extra space sit on the right. */
+  margin-left: 0;
+  margin-right: auto;
   display: flex;
   flex-direction: column;
 }
