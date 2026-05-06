@@ -196,20 +196,25 @@ def _yt_dump_json(url: str, env: dict) -> dict:
         _ytdlp_cmd() + ['--dump-json'] + _YT_BASE_ARGS + cookies + [url],
         capture_output=True, text=True, check=False, env=env,
     )
-    out = result.stdout.strip()
+    out_raw = result.stdout or ''
+    out = out_raw.strip()
+    parse_err = ''
     if out:
         try:
             return json.loads(out)
-        except json.JSONDecodeError:
-            pass
+        except json.JSONDecodeError as je:
+            parse_err = f"{je.__class__.__name__}: {je}"
     stderr = (result.stderr or '').strip()
     raise RuntimeError(
         f"Could not fetch video info from YouTube.\n"
         f"URL: {url}\n"
         f"yt-dlp exit: {result.returncode}\n"
-        f"yt-dlp said (last 3000 chars):\n{stderr[-3000:]}\n"
+        f"stdout bytes: {len(out_raw)}\n"
+        f"stdout head (first 300): {out_raw[:300]!r}\n"
+        f"json parse: {parse_err or '(stdout was empty)'}\n"
+        f"yt-dlp said (last 3000 chars of stderr):\n{stderr[-3000:]}\n"
         f"Cookies in use: {'yes' if cookies else 'NO — set YT_DLP_COOKIES or drop cookies.txt at project root'}\n"
-        f"If this persists, update yt-dlp:  pip install -U yt-dlp"
+        f"PATH: {env.get('PATH', '(unset)')[:200]}"
     )
 
 
