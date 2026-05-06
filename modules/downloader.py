@@ -166,7 +166,12 @@ def _download_youtube(url: str) -> tuple[str, str, dict]:
 
     # Don't trust exit code alone — if a file landed in output_dir, the download
     # succeeded even when yt-dlp returns non-zero due to GetPOT noise.
-    proc = subprocess.run(cmd, check=False, env=env, capture_output=True, text=True)
+    # stdin=DEVNULL: same fix as _yt_dump_json — pm2's stdin would otherwise
+    # cause yt-dlp to bail before producing output.
+    proc = subprocess.run(
+        cmd, check=False, env=env, capture_output=True, text=True,
+        stdin=subprocess.DEVNULL,
+    )
 
     files = [f for f in os.listdir(output_dir)
              if os.path.isfile(os.path.join(output_dir, f))]
@@ -191,9 +196,14 @@ def _yt_dump_json(url: str, env: dict) -> dict:
     when the JSON was successfully extracted via a fallback client.
     """
     cookies = _cookies_args()
+    # stdin=DEVNULL — under pm2 the parent's stdin can be a closed/broken pipe;
+    # without explicitly nulling it, yt-dlp's startup tty/pipe probes can die
+    # before it writes anything to stdout. CLI invocations don't hit this
+    # because the shell hands them a real terminal.
     result = subprocess.run(
         _ytdlp_cmd() + ['--dump-json'] + _YT_BASE_ARGS + cookies + [url],
         capture_output=True, text=True, check=False, env=env,
+        stdin=subprocess.DEVNULL,
     )
     out_raw = result.stdout or ''
     out = out_raw.strip()
