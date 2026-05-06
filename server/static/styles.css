@@ -1153,18 +1153,16 @@ body::before {
 .export-group .btn-ghost + .btn-ghost { border-left: 1px solid var(--border); }
 .export-group .btn-ghost:hover { background: var(--accent-soft); color: var(--accent); }
 
-/* Two-column viewer:
-   - Script column FLEXES to fill all leftover space (so VO + Visual cards
-     can sit side-by-side and use the page width).
-   - Player rail takes a comfortable fixed-ish slice (clamp 460–620 px);
-     it stays useful at every screen size without dominating. */
+/* Two-column viewer with EXPLICIT proportions so both columns get sensible
+   widths regardless of viewport. ~58% goes to the script (so VO + Visual
+   each get a comfortable 280–700 px of width), ~42% to the player rail. */
 .viewer-layout {
   max-width: none;
   margin: 0;
-  padding: clamp(18px, 2vw, 32px) clamp(20px, 3vw, 56px) 80px;
+  padding: clamp(18px, 1.8vw, 32px) clamp(20px, 2.4vw, 44px) 80px;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) clamp(460px, 32vw, 620px);
-  gap: clamp(24px, 2.4vw, 44px);
+  grid-template-columns: minmax(0, 1.4fr) minmax(420px, 1fr);
+  gap: clamp(18px, 1.8vw, 32px);
   align-items: start;
 }
 .viewer-script-pane { min-width: 0; }
@@ -1888,6 +1886,9 @@ body::before {
    ═══════════════════════════════════════════════════════════════════════════ */
 @media (max-width: 1280px) {
   :root { --sidebar-w: clamp(240px, 20vw, 280px); }
+  /* On laptop/standard-desktop widths, stack VO above Visual so each card
+     gets the full width of the script column instead of getting squeezed. */
+  .beat-body { grid-template-columns: 1fr; }
 }
 /* Below ~1100px: collapse to single column. The player still sticks to the
    top of the viewport so it scrolls with the script underneath. */
