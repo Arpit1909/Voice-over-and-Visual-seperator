@@ -1165,31 +1165,29 @@ body::before {
 .export-group .btn-ghost:hover { background: var(--accent-soft); color: var(--accent); }
 
 /* Three-column viewer above 1500px: script | margin comments | sticky player.
-   Below 1500px the margin column drops out (kept comments accessible via
-   highlights). Below 900px the layout collapses to a single column with
-   the player as a sticky banner — only true 'mobile view'. */
+   Below 1500px the margin column drops out. Below 900px the layout
+   collapses to a single column with the player as a sticky banner.
+   --player-w is set by JS via the drag-handle (or restored from
+   localStorage). When unset, we fall back to a sensible default. */
 .viewer-layout {
+  --player-w: clamp(520px, 32vw, 760px);
   max-width: none;
   margin: 0;
   padding: clamp(16px, 1.5vw, 32px) clamp(18px, 2vw, 40px) 80px;
   display: grid;
   grid-template-columns:
-    minmax(0, 1.5fr)              /* script  ≈ 45 %  */
-    minmax(220px, 0.7fr)          /* margin  ≈ 21 %  */
-    minmax(480px, 1.2fr);         /* player — min bumped to 480 so it
-                                     stays usable when zoomed out */
+    minmax(0, 1fr)
+    minmax(220px, 0.7fr)
+    var(--player-w);              /* user-resizable */
   gap: clamp(14px, 1.4vw, 24px);
   align-items: start;
 }
 
 /* 900–1500 px (most 13–15" laptops): drop the margin column but stay
-   in a comfortable two-column layout with the player still on the right.
-   No more 'goes to mobile view at 13"' — that was the bug. */
+   in a comfortable two-column layout with the player still on the right. */
 @media (max-width: 1500px) {
   .viewer-layout {
-    grid-template-columns:
-      minmax(0, 1.3fr)
-      minmax(480px, 1fr);
+    grid-template-columns: minmax(0, 1fr) var(--player-w);
   }
   .margin-comments-pane { display: none; }
 }
@@ -1207,7 +1205,44 @@ body::before {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  /* Resize handle anchors to this pane. */
 }
+
+/* Drag handle — narrow vertical strip on the left edge of the player pane.
+   Visible on hover; the active state colors the strip while dragging. */
+.player-resize-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -10px;
+  width: 12px;
+  cursor: ew-resize;
+  z-index: 11;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.player-resize-handle::before {
+  content: '';
+  width: 3px;
+  height: 48px;
+  border-radius: 2px;
+  background: var(--border-strong);
+  transition: background .15s, height .15s, width .15s;
+}
+.player-resize-handle:hover::before,
+.player-resize-handle--active::before {
+  background: var(--accent);
+  height: 64px;
+  width: 4px;
+}
+body.player-resizing,
+body.player-resizing * {
+  cursor: ew-resize !important;
+  user-select: none;
+}
+/* Hide the handle when collapsed to a single-column phone view */
+@media (max-width: 900px) { .player-resize-handle { display: none; } }
 .viewer-player-pane .player-card {
   width: 100%;
   display: flex;

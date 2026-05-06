@@ -906,6 +906,91 @@ function _renderViewer(id, payload, comments, token) {
 
   // Setup player
   setupPlayer(id, meta, beats);
+
+  // Restore saved player width and wire the drag-to-resize handle.
+  _setupPlayerResize();
+}
+
+// ── Resizable video player (drag handle on the player pane's left edge) ────
+function _setupPlayerResize() {
+  const layout = document.querySelector('.viewer-layout');
+  const pane   = document.querySelector('.viewer-player-pane');
+  if (!layout || !pane) return;
+
+  // Pull the saved width and apply (only if it's in a sane range).
+  try {
+    const saved = parseInt(localStorage.getItem('player-w'), 10);
+    if (saved && saved >= 360 && saved <= 1400) {
+      layout.style.setProperty('--player-w', saved + 'px');
+    }
+  } catch { /* */ }
+
+  // Inject the handle once.
+  let handle = pane.querySelector('.player-resize-handle');
+  if (!handle) {
+    handle = document.createElement('div');
+    handle.className = 'player-resize-handle';
+    handle.title = 'Drag to resize the video player';
+    handle.setAttribute('role', 'separator');
+    handle.setAttribute('aria-orientation', 'vertical');
+    pane.appendChild(handle);
+  }
+  if (handle._wired) return;
+  handle._wired = true;
+
+  let dragging = false;
+  let startX = 0;
+  let startW = 0;
+
+  const beginDrag = (clientX) => {
+    dragging = true;
+    startX = clientX;
+    const cur = getComputedStyle(layout).getPropertyValue('--player-w').trim();
+    // If --player-w is still a clamp() value, measure the actual pane width
+    // for an honest starting point.
+    startW = cur.endsWith('px') ? parseInt(cur, 10) : pane.getBoundingClientRect().width;
+    document.body.classList.add('player-resizing');
+    handle.classList.add('player-resize-handle--active');
+  };
+  const moveDrag = (clientX) => {
+    if (!dragging) return;
+    // Dragging LEFT (negative delta in clientX from start) widens the
+    // player; dragging right shrinks it.
+    const delta = startX - clientX;
+    const next = Math.min(Math.max(360, startW + delta), 1400);
+    layout.style.setProperty('--player-w', next + 'px');
+  };
+  const endDrag = () => {
+    if (!dragging) return;
+    dragging = false;
+    document.body.classList.remove('player-resizing');
+    handle.classList.remove('player-resize-handle--active');
+    // Persist the chosen width.
+    const cur = layout.style.getPropertyValue('--player-w');
+    const px  = parseInt(cur, 10);
+    if (px) {
+      try { localStorage.setItem('player-w', String(px)); } catch { /* */ }
+    }
+  };
+
+  handle.addEventListener('mousedown', (e) => { beginDrag(e.clientX); e.preventDefault(); });
+  document.addEventListener('mousemove', (e) => moveDrag(e.clientX));
+  document.addEventListener('mouseup',   endDrag);
+  // Touch support for trackpad / tablet users.
+  handle.addEventListener('touchstart', (e) => {
+    if (e.touches[0]) beginDrag(e.touches[0].clientX);
+  }, { passive: true });
+  document.addEventListener('touchmove', (e) => {
+    if (e.touches[0]) moveDrag(e.touches[0].clientX);
+  }, { passive: true });
+  document.addEventListener('touchend', endDrag);
+
+  // Double-click resets to the default.
+  handle.addEventListener('dblclick', () => {
+    layout.style.removeProperty('--player-w');
+    try { localStorage.removeItem('player-w'); } catch { /* */ }
+    toast('Player size reset', 'info');
+  });
 }
 
 function renderBeat(entry, idx, allBeats, comments) {
