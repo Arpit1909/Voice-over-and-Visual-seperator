@@ -1583,57 +1583,85 @@ function _renderPlayerComments() {
   });
 }
 
-// Scroll listener that picks the beat whose VO cell is closest to the
-// viewport center. Runs on every scroll frame (rAF-throttled) so the
-// comments panel updates fluidly whether the video is playing or paused.
+// Track which beat the user is currently reading. Algorithm:
+//   - Pick the LAST beat whose VO cell has scrolled above an "anchor line"
+//     at 40% of the viewport. That's the beat just above the user's natural
+//     reading focus — same heuristic Notion / Google Docs / Linear use for
+//     "current section".
+//   - If no beat is past the anchor (we're at the very top of the script),
+//     fall back to the first beat in the viewport.
+// rAF-throttled scroll + resize so it stays smooth on long scripts.
 let _scrollHandler = null;
+let _resizeHandler = null;
 
 function _wireBeatVisibilityTracking() {
-  // Tear down any previous binding from an earlier viewer.
+  // Tear down any previous wiring from an earlier viewer instance.
   if (_scriptObserver) { _scriptObserver.disconnect(); _scriptObserver = null; }
-  if (_scrollHandler) {
-    window.removeEventListener('scroll', _scrollHandler);
-    _scrollHandler = null;
-  }
+  if (_scrollHandler) { window.removeEventListener('scroll', _scrollHandler); _scrollHandler = null; }
+  if (_resizeHandler) { window.removeEventListener('resize', _resizeHandler); _resizeHandler = null; }
+
+  const ANCHOR_FRACTION = 0.40;   // 40 % from top of viewport
 
   const updateFocusedBeat = () => {
-    // One representative box per beat — vo-col is always present (even
-    // empty beats render the "— no voice-over —" placeholder there).
+    // VO cell is always present per beat (empty beats render a "no voice-over"
+    // placeholder), so we only need one representative box per row.
     const cells = document.querySelectorAll('.beat .vo-col');
     if (!cells.length) return;
 
     const viewportH = window.innerHeight || document.documentElement.clientHeight;
-    const centerY = viewportH / 2;
-    let bestIdx = -1;
-    let bestDist = Infinity;
+    const anchorY   = viewportH * ANCHOR_FRACTION;
+
+    let bestIdx     = -1;
+    let bestAnchorDist = Infinity; // for cells past the anchor: closest to it wins
+    let firstVisibleIdx = -1;
+    let firstVisibleTop = Infinity;
 
     cells.forEach(cell => {
       const rect = cell.getBoundingClientRect();
-      // Skip cells that aren't intersecting the viewport at all.
+      // Skip cells fully out of the viewport.
       if (rect.bottom < 0 || rect.top > viewportH) return;
-      const cellCenter = (rect.top + rect.bottom) / 2;
-      const dist = Math.abs(cellCenter - centerY);
-      if (dist < bestDist) {
-        bestDist = dist;
-        const beatEl = cell.closest('.beat');
-        const idx = parseInt((beatEl?.id || '').replace('beat-', ''), 10);
-        if (!Number.isNaN(idx)) bestIdx = idx;
+
+      const beatEl = cell.closest('.beat');
+      const idx = parseInt((beatEl?.id || '').replace('beat-', ''), 10);
+      if (Number.isNaN(idx)) return;
+
+      // Track the very first beat in the viewport for the fallback case.
+      if (rect.top < firstVisibleTop) {
+        firstVisibleTop = rect.top;
+        firstVisibleIdx = idx;
+      }
+
+      // Primary signal: cells whose top has crossed above the anchor line.
+      if (rect.top <= anchorY) {
+        const dist = anchorY - rect.top; // positive — how far past the anchor it is
+        // Smaller dist == top is closer to the anchor == this beat is the
+        // most recent one the user has scrolled into.
+        if (dist < bestAnchorDist) {
+          bestAnchorDist = dist;
+          bestIdx = idx;
+        }
       }
     });
 
-    if (bestIdx >= 0) _setIoFocusedBeat(bestIdx);
+    const finalIdx = bestIdx >= 0 ? bestIdx : firstVisibleIdx;
+    if (finalIdx >= 0) _setIoFocusedBeat(finalIdx);
   };
 
-  // rAF-throttle the scroll callback so we never run the search more than
-  // once per paint frame, even on a fast trackpad fling.
+  // rAF-throttle so we never run the search more than once per paint frame.
   let rafId = null;
-  _scrollHandler = () => {
+  const schedule = () => {
     if (rafId) return;
     rafId = requestAnimationFrame(() => { rafId = null; updateFocusedBeat(); });
   };
+  _scrollHandler = schedule;
+  _resizeHandler = schedule;
+
   window.addEventListener('scroll', _scrollHandler, { passive: true });
-  // Seed once so the panel has a focused beat before the user scrolls.
+  window.addEventListener('resize', _resizeHandler, { passive: true });
+  // Seed twice — the second pass catches sticky-element layout shifts that
+  // can mis-measure on the very first paint.
   updateFocusedBeat();
+  requestAnimationFrame(updateFocusedBeat);
 }
 
 function _focusComment(cid) {
