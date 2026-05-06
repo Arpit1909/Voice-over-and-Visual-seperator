@@ -1525,9 +1525,14 @@ function _renderPlayerComments() {
   const listEl  = document.getElementById('player-comments-list');
   if (!listEl) return;
 
+  // Total live (non-resolved) comments across every beat — shown in the
+  // header so users see at a glance how many comments exist anywhere.
+  const allLive = Object.values(_commentsCache).filter(c => !c.resolved);
+  const totalLabel = `${allLive.length} total`;
+
   const idx = _resolveFocusedBeat();
   if (idx < 0) {
-    if (titleEl) titleEl.textContent = 'No comments';
+    if (titleEl) titleEl.textContent = allLive.length ? `0 on this beat · ${totalLabel}` : 'No comments';
     if (countEl) countEl.textContent = '0';
     listEl.innerHTML = `<p class="player-comments-empty">Scroll through the script — comments on the visible beat appear here.</p>`;
     return;
@@ -1537,9 +1542,11 @@ function _renderPlayerComments() {
     .filter(c => c.beat_index === idx);
   const live = beatComments.filter(c => !c.resolved);
 
-  // Header shows the comment count (replaces the old "Beat N" label).
-  const noun = live.length === 1 ? 'comment' : 'comments';
-  if (titleEl) titleEl.textContent = `${live.length} ${noun}`;
+  // Header shows "<beat count> on this beat · <total> total" so the user
+  // gets both pieces of information in one glance.
+  if (titleEl) {
+    titleEl.textContent = `${live.length} on this beat · ${totalLabel}`;
+  }
   if (countEl) countEl.textContent = String(live.length);
 
   if (!beatComments.length) {
