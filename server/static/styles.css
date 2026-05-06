@@ -1154,14 +1154,16 @@ body::before {
 .export-group .btn-ghost:hover { background: var(--accent-soft); color: var(--accent); }
 
 /* Two-column viewer:
-   - Script column is fixed at the comfortable reading width.
-   - Player rail takes ALL remaining space — bigger screens → bigger player. */
+   - Script column FLEXES to fill all leftover space (so VO + Visual cards
+     can sit side-by-side and use the page width).
+   - Player rail takes a comfortable fixed-ish slice (clamp 460–620 px);
+     it stays useful at every screen size without dominating. */
 .viewer-layout {
   max-width: none;
   margin: 0;
   padding: clamp(18px, 2vw, 32px) clamp(20px, 3vw, 56px) 80px;
   display: grid;
-  grid-template-columns: minmax(0, 620px) minmax(480px, 1fr);
+  grid-template-columns: minmax(0, 1fr) clamp(460px, 32vw, 620px);
   gap: clamp(24px, 2.4vw, 44px);
   align-items: start;
 }
@@ -1182,12 +1184,9 @@ body::before {
 }
 .viewer-player-pane .player-card {
   max-height: calc(100vh - 36px);
-  /* Soft cap on enormous 4K/ultrawide screens; below this the player
-     auto-grows to fill the rail. */
-  max-width: 1400px;
-  /* Hug the script column on the left; let extra space sit on the right. */
-  margin-left: 0;
-  margin-right: auto;
+  /* Card fills the rail's full width — the rail itself is sized to be
+     comfortable at any screen, so no need for a separate width cap. */
+  width: 100%;
   display: flex;
   flex-direction: column;
 }
@@ -1406,11 +1405,12 @@ body::before {
   opacity: .9;
 }
 
-/* Body grid — VO and Visual are now SEPARATE cards. Auto-stacks when
-   columns would each be narrower than ~300px. */
+/* Body grid — VO and Visual sit side-by-side at every wide-screen size so
+   the script area uses the full page width. Stacks only on narrow viewports
+   (handled in the @media (max-width:900px) block). */
 .beat-body {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  grid-template-columns: 1fr 1fr;
   gap: clamp(14px, 1.4vw, 22px);
   min-width: 0;
 }
