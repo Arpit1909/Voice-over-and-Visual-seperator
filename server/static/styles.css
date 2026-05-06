@@ -1169,7 +1169,7 @@ body::before {
    video reads at a useful size; the user can drag the handle on the
    player's left edge to fine-tune (state persists in localStorage). */
 .viewer-layout {
-  --player-w: clamp(720px, 50vw, 1180px);
+  --player-w: clamp(820px, 58vw, 1340px);
   max-width: none;
   margin: 0;
   padding: clamp(16px, 1.5vw, 32px) clamp(18px, 2vw, 40px) 80px;
@@ -1647,28 +1647,10 @@ body.player-resizing * {
   color: #fff;
   border-color: var(--accent);
 }
-.beat--active .vo-text {
-  background: linear-gradient(120deg, rgba(180,135,60,.22), rgba(180,135,60,.10));
-  border-radius: var(--radius-sm);
-  padding: 8px 12px;
-  margin: -8px -12px;
-  color: #5e3f1c;
-  font-weight: 480;
-  box-shadow: 0 0 0 1px rgba(180,135,60,.32);
-  animation: nowPlayingPulse 2.4s ease-in-out infinite;
-}
-@keyframes nowPlayingPulse {
-  0%, 100% { box-shadow: 0 0 0 1px rgba(180,135,60,.32); }
-  50%      { box-shadow: 0 0 0 4px rgba(180,135,60,.18); }
-}
+/* Active row text — keep the body text crisp, no extra wash on top of the
+   row's existing inset highlight. */
+.beat--active .vo-text  { font-weight: 480; }
 .beat--active .vis-desc { color: var(--text); }
-.beat--active .dialogue-block {
-  background: linear-gradient(120deg, rgba(180,135,60,.22), rgba(180,135,60,.10));
-  box-shadow: 0 0 0 1px rgba(180,135,60,.32);
-  animation: nowPlayingPulse 2.4s ease-in-out infinite;
-}
-.beat--active .dlg-row { color: #5e3f1c; }
-.beat--active .dlg-quote { color: var(--vo-label); }
 .beat--active .beat-number-pill::after {
   content: " · NOW PLAYING";
   font-size: 9px;
@@ -1687,25 +1669,24 @@ body.player-resizing * {
    and a divider line. Top-aligned so paired content lines up. */
 .vo-col, .vis-col {
   background: var(--panel);
-  padding: 14px 18px 18px;
+  padding: 12px 16px 14px;
   min-width: 0;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--line);
   cursor: pointer;
   transition: background .12s;
   position: relative;
 }
-.vo-col  { border-right: 1px solid var(--border); }
+.vo-col  { border-right: 1px solid var(--line); }
 .vis-col { /* right edge of table — no extra border */ }
-.vo-col:hover, .vis-col:hover { background: var(--panel-hi); }
+.vo-col:hover, .vis-col:hover { background: rgba(20,20,18,.025); }
 
-/* Active row — both cells get a soft copper wash + cells of THIS beat
-   share the identifying ribbon along the left edge of the VO cell. */
+/* Active row — subtle copper inset on both cells + a 2px ribbon along the
+   top of the VO cell so the active row reads as 'selected' without flooding
+   it with color. */
 .beat--active .vo-col,
 .beat--active .vis-col {
-  background: var(--accent-soft);
-}
-.beat--active .vo-col {
-  box-shadow: inset 3px 0 0 var(--accent);
+  background: rgba(184, 90, 57, 0.045);
+  box-shadow: inset 0 2px 0 var(--accent);
 }
 
 .col-header {

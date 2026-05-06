@@ -1491,21 +1491,33 @@ function _patchCommentsInPlace(items) {
 }
 
 // ── Contextual comments panel below the video player ──────────────────────
-// Shows only the comments on the beat the user is currently looking at.
-// Updates as the user scrolls (IntersectionObserver) or as the playing
-// beat changes (set by makeTimeTracker → _setActiveBeatForComments).
-let _focusedBeatIdx = -1;        // which beat the comments panel currently shows
-let _scriptObserver = null;       // IntersectionObserver across all beat cells
+// Picks the beat to show comments for from two signals, in priority order:
+//   1. The currently *playing* beat (the .beat--active class set by the
+//      makeTimeTracker time-update callback).
+//   2. The most-visible beat from the IntersectionObserver (when nothing
+//      is playing — pure scrolling).
+let _ioFocusedIdx  = -1;          // last "most visible" beat from the observer
+let _scriptObserver = null;        // IntersectionObserver across all beat cells
 
-function _setFocusedBeat(idx, { explicit = false } = {}) {
-  if (idx === _focusedBeatIdx && !explicit) return;
-  _focusedBeatIdx = idx;
+function _setIoFocusedBeat(idx) {
+  if (idx === _ioFocusedIdx) return;
+  _ioFocusedIdx = idx;
   _renderPlayerComments();
 }
 
-// Called by the time-tracker every time the active beat changes during
-// playback — keeps the contextual panel synced with what's playing.
-function _setActiveBeatForComments(idx) { _setFocusedBeat(idx); }
+// Called by the time-tracker on every active-beat change during playback.
+function _setActiveBeatForComments(_idx) { _renderPlayerComments(); }
+
+function _resolveFocusedBeat() {
+  // Prefer the actively-playing beat (so seeking/auto-scroll instantly
+  // syncs the comments panel). Fall back to the scroll-visible beat.
+  const activeEl = document.querySelector('.beat--active');
+  if (activeEl) {
+    const i = parseInt((activeEl.id || '').replace('beat-', ''), 10);
+    if (!Number.isNaN(i)) return i;
+  }
+  return _ioFocusedIdx;
+}
 
 function _renderPlayerComments() {
   const titleEl = document.getElementById('player-comments-title');
@@ -1513,7 +1525,7 @@ function _renderPlayerComments() {
   const listEl  = document.getElementById('player-comments-list');
   if (!listEl) return;
 
-  const idx = _focusedBeatIdx;
+  const idx = _resolveFocusedBeat();
   if (idx < 0) {
     if (titleEl) titleEl.textContent = 'No comments';
     if (countEl) countEl.textContent = '0';
