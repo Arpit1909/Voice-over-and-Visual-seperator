@@ -1876,6 +1876,12 @@ body::before {
   resize: vertical;
 }
 .cmt-pop-form .cmt-pop-author { margin-bottom: 8px; }
+.cmt-pop-as {
+  font-size: 11px;
+  color: var(--text-3);
+  margin-bottom: 8px;
+}
+.cmt-pop-as strong { color: var(--text); font-weight: 500; }
 .cmt-pop-body { min-height: 64px; font-family: var(--font-body); }
 .cmt-pop-form .cmt-pop-author:focus,
 .cmt-pop-body:focus {

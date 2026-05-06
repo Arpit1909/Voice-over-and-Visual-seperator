@@ -1151,23 +1151,31 @@ function _buildPopover(rect) {
 
 function _openNewCommentPopover({ beatIdx, field, quote, start, end, anchorRect }) {
   const pop = _buildPopover(anchorRect);
-  // Pre-fill author from (in priority order):
-  //   1. window._me.name — signed-in Google user, fetched at boot
-  //   2. localStorage 'cmt-author' — last name the user typed in this browser
-  //   3. window._me.email's local-part — useful when name is missing in token
+  // Resolve the author with a clear priority chain:
+  //   1. window._me.name        — signed-in Google user from /api/me
+  //   2. localStorage cmt-author — last name typed in this browser
+  //   3. local-part of email     — 'manpreet' from manpreet@…
   const remembered = (() => {
     try { return localStorage.getItem('cmt-author') || ''; } catch { return ''; }
   })();
-  const defaultAuthor =
-    (window._me && window._me.name) ||
-    remembered ||
-    ((window._me && window._me.email || '').split('@')[0]) ||
-    '';
+  const sessionName = window._me && window._me.name;
+  const sessionEmailLocal =
+    ((window._me && window._me.email) || '').split('@')[0] || '';
+  const defaultAuthor = sessionName || remembered || sessionEmailLocal || '';
+
+  // When we know the user from the session, hide the input and show
+  // "Commenting as: …" instead — nicer than an empty field they don't
+  // realise will be auto-filled by the server.
+  const authorRow = sessionName
+    ? `<div class="cmt-pop-as">Commenting as <strong>${esc(sessionName)}</strong></div>
+       <input type="hidden" class="cmt-pop-author" value="${esc(sessionName)}">`
+    : `<input type="text" class="cmt-pop-author" placeholder="Your name"
+              maxlength="60" value="${esc(defaultAuthor)}">`;
+
   pop.innerHTML = `
     <div class="cmt-pop-quote">${esc(quote)}</div>
     <form class="cmt-pop-form">
-      <input type="text" class="cmt-pop-author" placeholder="Your name"
-             maxlength="60" value="${esc(defaultAuthor)}">
+      ${authorRow}
       <textarea class="cmt-pop-body" placeholder="Add a comment…" rows="3" required></textarea>
       <div class="cmt-pop-actions">
         <button type="button" class="link-btn cmt-pop-cancel">Cancel</button>
@@ -1981,11 +1989,15 @@ async function boot() {
   });
 
   // Fetch the signed-in user once so the comment popover can pre-fill author.
-  // Failure (e.g. auth disabled in dev) is fine — the popover falls back to
-  // an empty author and the server attributes anonymously.
+  // Logs to the console so you can diagnose what's coming back without
+  // having to type commands.
   try {
     window._me = await api('/api/me');
-  } catch { window._me = null; }
+    console.log('[auth] /api/me →', window._me);
+  } catch (err) {
+    window._me = null;
+    console.warn('[auth] /api/me failed:', err?.message || err);
+  }
 
   await Promise.all([refreshHistory(), refreshStorage()]);
   setInterval(refreshStorage, 30000);
