@@ -64,7 +64,17 @@ _YT_FORMAT_ARGS = [
 ]
 
 def _ytdlp_cmd() -> list:
-    """Use the same Python interpreter's yt_dlp module — avoids PATH issues with venvs."""
+    """Prefer the standalone yt-dlp binary on PATH (frozen exe, no Python-side
+    plugin loading) over `python -m yt_dlp`. The Python module on this venv
+    activates yt-dlp's built-in GetPOT framework which fights with cookies-only
+    clients on bot-flagged IPs; the standalone binary stays out of that path
+    and just hits the working clients with the cookies, which is what the
+    timestamp tool on this same VPS does successfully.
+    """
+    import shutil
+    standalone = shutil.which('yt-dlp')
+    if standalone:
+        return [standalone]
     return [sys.executable, '-m', 'yt_dlp']
 
 
