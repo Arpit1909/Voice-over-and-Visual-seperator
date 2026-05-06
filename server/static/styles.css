@@ -1392,31 +1392,8 @@ body::before {
 .script-table-head-cell--vo  { border-right: 1px solid #d99696; }
 .script-table-head-cell--vis { /* no extra border */ }
 
-/* Section banner — gray strip across both columns, like the PDF. */
-.section-header {
-  grid-column: 1 / -1;
-  display: flex;
-  align-items: baseline;
-  gap: 14px;
-  padding: 10px 18px;
-  margin: 0;
-  background: #efeeea;
-  border-top: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
-  flex-wrap: wrap;
-}
-.section-header:first-of-type { border-top: none; }
-.section-header .section-number { display: none; }
-.section-header .section-title {
-  font-family: var(--font-body);
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: 0;
-  color: #4a4a52;
-  text-transform: none;
-  font-variation-settings: normal;
-}
-.section-header .section-meta { display: none; }
+/* Section banners hidden — beats now flow continuously. */
+.section-header { display: none; }
 .section-header:first-child { margin-top: 0; }
 .section-number {
   font-family: var(--font-mono);

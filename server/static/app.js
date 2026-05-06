@@ -819,10 +819,6 @@ function _renderViewer(id, payload, comments, token) {
   $('#viewer-meta').innerHTML = `
     <span>⏱ ${esc(data.total_duration || fmtClock(meta.duration_secs))}</span>
     <span>·</span>
-    <span>📁 ${meta.sections_count} sections</span>
-    <span>·</span>
-    <span>🎞 ${meta.beats_count} beats</span>
-    <span>·</span>
     <span>${esc(fmtRel(meta.created_at))}</span>`;
 
   $('#viewer-delete').onclick = async () => {
