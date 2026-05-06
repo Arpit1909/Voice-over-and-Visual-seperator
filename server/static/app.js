@@ -1509,14 +1509,20 @@ function _setIoFocusedBeat(idx) {
 function _setActiveBeatForComments(_idx) { _renderPlayerComments(); }
 
 function _resolveFocusedBeat() {
-  // Prefer the actively-playing beat (so seeking/auto-scroll instantly
-  // syncs the comments panel). Fall back to the scroll-visible beat.
+  // Prefer the beat the user is currently *looking at* (most-visible from
+  // the IntersectionObserver). This works whether the video is playing,
+  // paused, or hasn't started — wherever you scroll, the panel follows.
+  // Auto-scroll already centers the playing beat in the viewport, so during
+  // playback the IO and the active beat naturally agree.
+  if (_ioFocusedIdx >= 0) return _ioFocusedIdx;
+  // Fallback for the initial paint before the observer has fired: use
+  // whatever beat is currently flagged as playing.
   const activeEl = document.querySelector('.beat--active');
   if (activeEl) {
     const i = parseInt((activeEl.id || '').replace('beat-', ''), 10);
     if (!Number.isNaN(i)) return i;
   }
-  return _ioFocusedIdx;
+  return -1;
 }
 
 function _renderPlayerComments() {
