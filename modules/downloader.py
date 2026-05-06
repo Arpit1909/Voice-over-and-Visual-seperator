@@ -44,15 +44,16 @@ SUPPORTED_EXTENSIONS = {'.mp4', '.avi', '.mov', '.mkv', '.webm', '.flv', '.wmv',
 #   --js-runtimes node  → lets yt-dlp solve the YouTube `n` JS challenge
 #   -4                  → force IPv4 (datacenter v6 ranges are flagged harder)
 #   --no-check-certificate → tolerate intermediate proxies/MITM in some networks
-# We previously avoided pinning `youtube:player_client`, but due to YouTube's recent
-# PO Token requirements on the web client, forcing mobile clients (ios,android)
-# bypasses the need for PO Tokens on headless VPS instances.
+# We must use clients that SUPPORT cookies (so ios/android are excluded),
+# but we want to avoid the default web/web_safari clients which strictly enforce
+# PO Tokens on headless servers. tv_embedded, mweb, and web_creator are fallback
+# clients that support cookies.
 _YT_BASE_ARGS = [
     '--no-playlist',
     '--no-check-certificate',
     '--js-runtimes', 'node',
     '-4',
-    '--extractor-args', 'youtube:player_client=ios,android'
+    '--extractor-args', 'youtube:player_client=tv_embedded,mweb,web_creator'
 ]
 
 # Format selector: progressive mp4 first, then split video+audio merged to mp4,
