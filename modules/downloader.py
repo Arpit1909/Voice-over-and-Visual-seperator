@@ -39,21 +39,14 @@ def extract_url(text: str) -> str:
 
 SUPPORTED_EXTENSIONS = {'.mp4', '.avi', '.mov', '.mkv', '.webm', '.flv', '.wmv', '.mpg', '.mpeg', '.3gp', '.m4v'}
 
-# Flags shared by every yt-dlp call. Mirrors the pattern that works on bot-flagged
-# datacenter IPs without bgutil/PO-Token plumbing:
-#   --js-runtimes node  → lets yt-dlp solve the YouTube `n` JS challenge
-#   -4                  → force IPv4 (datacenter v6 ranges are flagged harder)
-#   --no-check-certificate → tolerate intermediate proxies/MITM in some networks
-# We must use clients that SUPPORT cookies (so ios/android are excluded),
-# but we want to avoid the default web/web_safari clients which strictly enforce
-# PO Tokens on headless servers. tv_embedded, mweb, and web_creator are fallback
-# clients that support cookies.
+# Let yt-dlp pick its own player_client. With bgutil's PO-Token helper running
+# on localhost:4416, yt-dlp can mint a token, satisfy YouTube's gate, and the
+# default web client returns full video formats — no fragile client pinning.
 _YT_BASE_ARGS = [
     '--no-playlist',
     '--no-check-certificate',
     '--js-runtimes', 'node',
     '-4',
-    '--extractor-args', 'youtube:player_client=tv_embedded,mweb,web_creator'
 ]
 
 # Format selector: progressive mp4 first, then split video+audio merged to mp4,
@@ -64,17 +57,11 @@ _YT_FORMAT_ARGS = [
 ]
 
 def _ytdlp_cmd() -> list:
-    """Prefer the standalone yt-dlp binary on PATH (frozen exe, no Python-side
-    plugin loading) over `python -m yt_dlp`. The Python module on this venv
-    activates yt-dlp's built-in GetPOT framework which fights with cookies-only
-    clients on bot-flagged IPs; the standalone binary stays out of that path
-    and just hits the working clients with the cookies, which is what the
-    timestamp tool on this same VPS does successfully.
+    """Use the venv's yt_dlp module so the bgutil-ytdlp-pot-provider Python
+    plugin (installed via pip in the same venv) is auto-loaded. PO Tokens are
+    the only reliable way to get real video formats from a flagged datacenter
+    IP in 2026; the bgutil plugin talks to a localhost helper that mints them.
     """
-    import shutil
-    standalone = shutil.which('yt-dlp')
-    if standalone:
-        return [standalone]
     return [sys.executable, '-m', 'yt_dlp']
 
 
