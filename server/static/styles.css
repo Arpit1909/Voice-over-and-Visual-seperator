@@ -1158,7 +1158,7 @@ body::before {
   margin: 0 auto;
   padding: clamp(18px, 2vw, 32px) clamp(20px, 3vw, 56px) 80px;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) clamp(320px, 26vw, 420px);
+  grid-template-columns: minmax(0, 1fr) clamp(400px, 34vw, 580px);
   gap: clamp(20px, 2vw, 36px);
   align-items: start;
 }
@@ -1861,30 +1861,28 @@ body::before {
   :root { --sidebar-w: clamp(240px, 20vw, 280px); }
 }
 /* Below ~1100px: collapse to single column. The player still sticks to the
-   top of the viewport so it scrolls with the script underneath. We cap its
-   height to roughly half the viewport so the script is always visible too. */
+   top of the viewport so it scrolls with the script underneath. */
 @media (max-width: 1100px) {
   .viewer-layout { grid-template-columns: 1fr; }
   .viewer-player-pane {
     order: -1;
     position: sticky;
     top: 0;
-    max-height: 60vh;
+    max-height: 70vh;
     margin: 0 calc(clamp(20px, 3vw, 56px) * -1);
-    /* slight backdrop so beats peeking out below stay visible behind the rail */
     background: var(--bg);
     padding: 8px clamp(20px, 3vw, 56px);
     border-bottom: 1px solid var(--line);
   }
   .viewer-player-pane .player-card {
-    max-height: calc(60vh - 16px);
+    max-height: calc(70vh - 16px);
     border-radius: var(--radius);
   }
-  /* Keep the 16:9 aspect ratio but cap by max-height so the video doesn't
-     dominate on tiny laptops. */
+  /* Bigger video — fills more of the visible viewport while still leaving
+     ~30vh of script visible underneath. */
   .viewer-player-pane .player-wrap {
     padding-bottom: 0;
-    height: clamp(180px, 32vh, 300px);
+    height: clamp(280px, 50vh, 480px);
   }
 }
 @media (max-width: 900px) {
