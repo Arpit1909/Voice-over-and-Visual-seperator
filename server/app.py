@@ -140,16 +140,8 @@ async def api_logout(request: Request):
     return {"ok": True}
 
 
-@app.get('/api/me')
-async def api_me(request: Request, _: None = Depends(auth.require_auth)):
-    """Return the signed-in user so the front-end can auto-fill comment
-    author and any future personalization. Empty dict when OAuth is off."""
-    user = auth.get_user(request) or {}
-    return {
-        'email':   user.get('email', ''),
-        'name':    user.get('name', '') or (user.get('email', '').split('@')[0] if user.get('email') else ''),
-        'picture': user.get('picture', ''),
-    }
+# /api/me already exists earlier in this file — the older route returns
+# {authenticated, auth_required, user: {email, name, picture}}.
 
 
 # ── History + storage ────────────────────────────────────────────────────────

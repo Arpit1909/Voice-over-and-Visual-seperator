@@ -1152,15 +1152,17 @@ function _buildPopover(rect) {
 function _openNewCommentPopover({ beatIdx, field, quote, start, end, anchorRect }) {
   const pop = _buildPopover(anchorRect);
   // Resolve the author with a clear priority chain:
-  //   1. window._me.name        — signed-in Google user from /api/me
+  //   1. signed-in Google user (from /api/me's user.{name,email})
   //   2. localStorage cmt-author — last name typed in this browser
   //   3. local-part of email     — 'manpreet' from manpreet@…
   const remembered = (() => {
     try { return localStorage.getItem('cmt-author') || ''; } catch { return ''; }
   })();
-  const sessionName = window._me && window._me.name;
-  const sessionEmailLocal =
-    ((window._me && window._me.email) || '').split('@')[0] || '';
+  // /api/me returns { authenticated, auth_required, user: {email, name, picture} }
+  const sessionUser  = (window._me && window._me.user) || {};
+  const sessionName  = (sessionUser.name || '').trim();
+  const sessionEmail = (sessionUser.email || '').trim();
+  const sessionEmailLocal = sessionEmail.split('@')[0] || '';
   const defaultAuthor = sessionName || remembered || sessionEmailLocal || '';
 
   // When we know the user from the session, hide the input and show
