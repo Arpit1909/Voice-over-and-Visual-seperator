@@ -1164,186 +1164,125 @@ body::before {
 .export-group .btn-ghost + .btn-ghost { border-left: 1px solid var(--border); }
 .export-group .btn-ghost:hover { background: var(--accent-soft); color: var(--accent); }
 
-/* Two-column viewer with the PLAYER as the dominant column so it visually
-   fills the right half of the page. Script column carries VO/Visual cards
-   stacked (or side-by-side at very wide viewports). */
+/* Two-column viewer: script table on the left, sticky video player on the
+   right. Same minimal layout as the PDF export — VO and Visuals as the only
+   two columns, comments as inline highlights you click to expand. */
 .viewer-layout {
   max-width: none;
   margin: 0;
   padding: clamp(18px, 1.8vw, 32px) clamp(20px, 2.4vw, 44px) 80px;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(560px, 1.4fr);
-  gap: clamp(18px, 1.8vw, 32px);
+  grid-template-columns: minmax(0, 1fr) clamp(380px, 28vw, 520px);
+  gap: clamp(20px, 1.8vw, 32px);
   align-items: start;
 }
 .viewer-script-pane { min-width: 0; }
 
-/* Player rail — sticky on every screen size so it always follows the reader.
-   The whole rail (player card + comments panel) sticks together at the top
-   of the viewport, capped to the viewport height. The comments panel scrolls
-   internally if it has more entries than fit. */
+/* Player rail — sticky on every screen size, just the player card. Smaller
+   than before since the right column is now a fixed-width slice. */
 .viewer-player-pane {
   position: sticky;
   top: 18px;
   align-self: start;
   z-index: 10;
-  max-height: calc(100vh - 36px);
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  overflow: visible;
 }
 .viewer-player-pane .player-card {
   width: 100%;
   display: flex;
   flex-direction: column;
-  flex: 0 0 auto;
 }
-.viewer-player-pane .player-wrap { flex: 0 0 auto; }
-.viewer-player-pane .player-footer { flex: 0 0 auto; }
 
-/* Comments panel sits below the player card and fills any remaining vertical
-   space in the sticky rail. Its list scrolls internally if there are many
-   comments — the panel itself never grows past the viewport. */
-.comments-panel {
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-sm);
-  flex: 1 1 auto;
-  min-height: 0;            /* allow flex shrink */
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
+/* ─────────────────────────────────────────────────────────────────────────
+   MARGIN COMMENTS — Word/Google-Docs-style anchored comment column.
+   Each comment is positioned absolutely at the vertical offset of its
+   anchor highlight in the script, so the comment lines up with the row
+   it's commenting on. Scrolls naturally with the page. */
+.margin-comments-pane {
+  position: relative;
+  align-self: stretch;        /* match the script-pane's full height */
+  min-height: 100%;
 }
-.comments-panel-head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 12px 14px;
-  border-bottom: 1px solid var(--line);
-  background: var(--panel-soft);
-}
-.comments-panel-title {
-  font-family: var(--font-display);
-  font-size: 13px;
-  font-weight: 480;
-  color: var(--text);
-  font-variation-settings: 'opsz' 18;
-}
-.comments-panel-count {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--accent);
-  background: var(--accent-soft);
-  border: 1px solid var(--accent-line);
-  padding: 1px 8px;
-  border-radius: 999px;
-  min-width: 22px;
+.margin-comments-empty {
+  position: absolute;
+  top: 16px;
+  left: 0; right: 0;
   text-align: center;
-}
-.comments-panel-toggle {
-  margin-left: auto;
-  font-size: 11px;
-  letter-spacing: 0.02em;
-}
-.comments-panel-list {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow-y: auto;
-  padding: 6px;
-  scrollbar-width: thin;
-  scrollbar-color: var(--border-strong) transparent;
-}
-.comments-panel-list::-webkit-scrollbar { width: 6px; }
-.comments-panel-list::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 3px; }
-.comments-panel-list::-webkit-scrollbar-thumb:hover { background: var(--text-3); }
-
-.comments-panel-empty {
-  padding: 24px 16px;
   font-size: 12px;
   color: var(--text-3);
-  text-align: center;
   font-style: italic;
   line-height: 1.6;
+  padding: 12px 6px;
 }
+.margin-comments-empty strong { color: var(--text-2); font-style: normal; font-weight: 500; }
 
-/* Each row is a button so clicks (and Enter/Space) navigate to the highlight. */
-.comments-panel-item {
-  display: block;
-  width: 100%;
-  text-align: left;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  padding: 10px 12px;
-  margin-bottom: 4px;
+.margin-comment {
+  position: absolute;
+  left: 0; right: 0;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius-sm);
+  padding: 9px 12px 10px;
+  box-shadow: var(--shadow-sm);
   cursor: pointer;
-  transition: background .12s, border-color .12s;
-  position: relative;
+  transition: top .25s ease, background .12s, border-color .12s, box-shadow .15s;
 }
-.comments-panel-item:hover {
-  background: var(--panel-soft);
-  border-color: var(--border);
+.margin-comment::before {
+  /* The little tether line connecting the comment back to its anchor in
+     the script. A short copper bar that hangs off the left edge. */
+  content: '';
+  position: absolute;
+  left: -28px; top: 14px;
+  width: 24px; height: 2px;
+  background: var(--accent-line);
+  border-radius: 2px;
 }
-.comments-panel-item:active { transform: scale(.997); }
-.comments-panel-item:focus-visible {
-  outline: none;
+.margin-comment:hover {
   background: var(--accent-soft);
   border-color: var(--accent-line);
+  border-left-color: var(--accent);
+  box-shadow: 0 4px 14px rgba(184,90,57,.10);
 }
-.comments-panel-item--resolved { opacity: .55; }
-.comments-panel-item--resolved .comments-panel-body { text-decoration: line-through; }
+.margin-comment:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.margin-comment--resolved {
+  opacity: .55;
+  border-left-color: var(--success);
+}
+.margin-comment--resolved .margin-comment-body { text-decoration: line-through; }
 
-.comments-panel-quote {
+.margin-comment-quote {
   font-family: var(--font-display);
   font-style: italic;
-  font-size: 12px;
+  font-size: 11px;
   color: var(--vo-label);
-  background: var(--vo-bg);
-  border-left: 2px solid var(--vo-border);
-  padding: 4px 9px;
-  border-radius: 0 4px 4px 0;
-  margin-bottom: 6px;
-  line-height: 1.45;
-  /* Truncate to 2 lines */
+  margin-bottom: 4px;
+  line-height: 1.4;
   display: -webkit-box;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 1;
   -webkit-box-orient: vertical;
   overflow: hidden;
   word-break: break-word;
   font-variation-settings: 'opsz' 18;
 }
-.comments-panel-meta {
+.margin-comment-meta {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   align-items: baseline;
-  font-size: 11px;
-  margin-bottom: 4px;
+  font-size: 10px;
+  margin-bottom: 5px;
 }
-.comments-panel-meta .comments-panel-author { font-weight: 500; color: var(--text); }
-.comments-panel-time { color: var(--text-3); font-family: var(--font-mono); }
-.comments-panel-resolved {
-  margin-left: auto;
-  font-size: 9px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--success);
-  background: var(--success-soft);
-  border: 1px solid rgba(74,155,110,.28);
-  padding: 1px 7px;
-  border-radius: 999px;
-}
-.comments-panel-body {
-  font-size: 12.5px;
+.margin-comment-author { font-weight: 500; color: var(--text); }
+.margin-comment-time { color: var(--text-3); font-family: var(--font-mono); }
+.margin-comment-body {
+  font-size: 12px;
   line-height: 1.5;
-  color: var(--text-2);
+  color: var(--text);
   word-break: break-word;
-  /* Truncate long bodies to 4 lines so the list scans cleanly. */
   display: -webkit-box;
-  -webkit-line-clamp: 4;
+  -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
@@ -2081,29 +2020,29 @@ body::before {
   .vis-col { border-bottom: 2px solid var(--border); }
   .beat--active .vo-col { box-shadow: inset 3px 0 0 var(--accent); }
 }
-/* Below ~1100px: collapse to single column. The player still sticks to the
-   top of the viewport so it scrolls with the script underneath. */
-@media (max-width: 1100px) {
+/* Below ~1280px: collapse the 3-column layout to a single column. Margin
+   comments hide (they don't make sense without their reference column);
+   the comments still appear in the script via highlights and the popover. */
+@media (max-width: 1280px) {
   .viewer-layout { grid-template-columns: 1fr; }
+  .margin-comments-pane { display: none; }
   .viewer-player-pane {
     order: -1;
     position: sticky;
     top: 0;
-    max-height: 70vh;
+    max-height: 60vh;
     margin: 0 calc(clamp(20px, 3vw, 56px) * -1);
     background: var(--bg);
     padding: 8px clamp(20px, 3vw, 56px);
     border-bottom: 1px solid var(--line);
   }
   .viewer-player-pane .player-card {
-    max-height: calc(70vh - 16px);
+    max-height: calc(60vh - 16px);
     border-radius: var(--radius);
   }
-  /* Bigger video — fills more of the visible viewport while still leaving
-     ~30vh of script visible underneath. */
   .viewer-player-pane .player-wrap {
     padding-bottom: 0;
-    height: clamp(280px, 50vh, 480px);
+    height: clamp(240px, 42vh, 380px);
   }
 }
 @media (max-width: 900px) {

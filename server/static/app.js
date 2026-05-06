@@ -875,7 +875,6 @@ function _renderViewer(id, payload, comments, token) {
     (commentsByBeat[c.beat_index] = commentsByBeat[c.beat_index] || []).push(c);
   }
   _indexComments(comments?.items);
-  _renderCommentsPanel(comments?.items || []);
   _currentAnalysisId = id;
   _startCommentsPoll(id);
 
@@ -1344,8 +1343,6 @@ function _patchCommentsInPlace(items) {
     const rawText = el.textContent; // <mark> children flatten to plain text
     el.innerHTML = renderHighlighted(rawText, fieldComments);
   });
-
-  _renderCommentsPanel(items);
 }
 
 // ── Comments panel (sidebar list under the video player) ───────────────────
