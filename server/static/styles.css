@@ -519,22 +519,38 @@ body::before {
 
 .hist-actions {
   display: flex;
-  gap: 2px;
+  gap: 4px;
   flex-shrink: 0;
+  align-self: flex-start;
+  margin-top: -2px;
 }
 .hist-edit, .hist-del {
   opacity: 0;
-  width: 24px; height: 24px;
-  border-radius: 5px;
-  font-size: 13px;
+  width: 26px; height: 26px;
+  border-radius: 6px;
+  background: transparent;
+  border: 1px solid transparent;
   color: var(--text-3);
-  transition: opacity .12s, background .12s, color .12s;
+  transition: opacity .12s ease, background .12s, color .12s, border-color .12s, transform .08s;
   display: grid; place-items: center;
+  padding: 0;
 }
+.hist-edit svg, .hist-del svg { display: block; }
 .hist-item:hover .hist-edit,
-.hist-item:hover .hist-del { opacity: 1; }
-.hist-edit:hover { background: var(--accent-soft); color: var(--accent); }
-.hist-del:hover  { background: var(--danger-soft); color: var(--danger); }
+.hist-item:hover .hist-del,
+.hist-item--active .hist-edit,
+.hist-item--active .hist-del { opacity: 1; }
+.hist-edit:hover {
+  background: var(--accent-soft);
+  border-color: var(--accent-line);
+  color: var(--accent);
+}
+.hist-del:hover {
+  background: var(--danger-soft);
+  border-color: rgba(200,74,82,.28);
+  color: var(--danger);
+}
+.hist-edit:active, .hist-del:active { transform: scale(.92); }
 
 .hist-title-input {
   width: 100%;
