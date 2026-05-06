@@ -1164,11 +1164,10 @@ body::before {
 .export-group .btn-ghost + .btn-ghost { border-left: 1px solid var(--border); }
 .export-group .btn-ghost:hover { background: var(--accent-soft); color: var(--accent); }
 
-/* Three-column viewer: script | margin comments | sticky player.
-   Uses fr ratios so the LAYOUT looks identical at every screen size — a
-   27" desktop just shows the same proportional view scaled up, and a
-   13" laptop the same proportional view scaled down. minmax() guarantees
-   sensible minimums so nothing collapses unreadably. */
+/* Three-column viewer above 1500px: script | margin comments | sticky player.
+   Below 1500px the margin column drops out (kept comments accessible via
+   highlights). Below 900px the layout collapses to a single column with
+   the player as a sticky banner — only true 'mobile view'. */
 .viewer-layout {
   max-width: none;
   margin: 0;
@@ -1177,9 +1176,22 @@ body::before {
   grid-template-columns:
     minmax(0, 1.5fr)              /* script  ≈ 45 %  */
     minmax(220px, 0.7fr)          /* margin  ≈ 21 %  */
-    minmax(400px, 1.1fr);         /* player  ≈ 34 %  */
+    minmax(480px, 1.2fr);         /* player — min bumped to 480 so it
+                                     stays usable when zoomed out */
   gap: clamp(14px, 1.4vw, 24px);
   align-items: start;
+}
+
+/* 900–1500 px (most 13–15" laptops): drop the margin column but stay
+   in a comfortable two-column layout with the player still on the right.
+   No more 'goes to mobile view at 13"' — that was the bug. */
+@media (max-width: 1500px) {
+  .viewer-layout {
+    grid-template-columns:
+      minmax(0, 1.3fr)
+      minmax(480px, 1fr);
+  }
+  .margin-comments-pane { display: none; }
 }
 .viewer-script-pane { min-width: 0; }
 
@@ -2090,9 +2102,9 @@ body::before {
   .vis-col { border-bottom: 2px solid var(--border); }
   .beat--active .vo-col { box-shadow: inset 3px 0 0 var(--accent); }
 }
-/* Below 1280px: only adaptive shift in the whole app — collapse the 3-col
-   to a single column with the player as a sticky banner at the top. */
-@media (max-width: 1280px) {
+/* True mobile collapse — only below 900 px. Player becomes a sticky
+   banner at the top of the viewport while the script scrolls underneath. */
+@media (max-width: 900px) {
   .viewer-layout { grid-template-columns: 1fr; }
   .margin-comments-pane { display: none; }
   .viewer-player-pane {
