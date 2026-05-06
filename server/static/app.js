@@ -1151,8 +1151,18 @@ function _buildPopover(rect) {
 
 function _openNewCommentPopover({ beatIdx, field, quote, start, end, anchorRect }) {
   const pop = _buildPopover(anchorRect);
-  // Pre-fill author from the signed-in user (fetched once into _me).
-  const defaultAuthor = (window._me && window._me.name) || '';
+  // Pre-fill author from (in priority order):
+  //   1. window._me.name — signed-in Google user, fetched at boot
+  //   2. localStorage 'cmt-author' — last name the user typed in this browser
+  //   3. window._me.email's local-part — useful when name is missing in token
+  const remembered = (() => {
+    try { return localStorage.getItem('cmt-author') || ''; } catch { return ''; }
+  })();
+  const defaultAuthor =
+    (window._me && window._me.name) ||
+    remembered ||
+    ((window._me && window._me.email || '').split('@')[0]) ||
+    '';
   pop.innerHTML = `
     <div class="cmt-pop-quote">${esc(quote)}</div>
     <form class="cmt-pop-form">
@@ -1172,6 +1182,11 @@ function _openNewCommentPopover({ beatIdx, field, quote, start, end, anchorRect 
     const body = ta.value.trim();
     if (!body) return;
     const author = pop.querySelector('.cmt-pop-author').value.trim();
+    // Persist the typed name so the next popover pre-fills it automatically,
+    // even when no Google session / /api/me is available.
+    if (author) {
+      try { localStorage.setItem('cmt-author', author); } catch { /* */ }
+    }
     try {
       await api(`/api/results/${_currentAnalysisId}/comments`, {
         method: 'POST',
