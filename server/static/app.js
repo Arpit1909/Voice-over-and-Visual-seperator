@@ -1272,11 +1272,36 @@ async function _deleteComment(cid) {
 }
 
 async function _refetchAndRerender() {
+  // Re-paint the viewer with fresh comments WITHOUT touching scroll position
+  // or refetching the analysis payload — only comments change on add/edit/
+  // delete/resolve, and a full openViewer() jumps the page back to the top.
   const h = window.location.hash;
   if (!h.startsWith('#/view/')) return;
   const id = h.slice('#/view/'.length);
-  _cacheInvalidate(id);
-  openViewer(id);
+  const cached = _cacheGet(id);
+  if (!cached?.payload) {
+    // No cached payload — fall back to a full reload (rare; happens if the
+    // viewer was opened, then the cache evicted before the action ran).
+    _cacheInvalidate(id);
+    return openViewer(id);
+  }
+
+  const scrollY = window.scrollY;
+  try {
+    const fresh = await api(`/api/results/${id}/comments`);
+    cached.comments = fresh;
+    _cacheSet(id, cached);
+    _renderViewer(id, cached.payload, fresh, _viewerLoadToken);
+    // Resync the poll signature so the next tick doesn't double-render the
+    // change we just applied locally.
+    _commentsPollSig = _commentsSignature(fresh.items || []);
+  } catch (e) {
+    toast(`Could not refresh: ${e.message}`, 'error');
+    return;
+  }
+  // Re-renders rebuild #viewer-script's innerHTML which can shift layout.
+  // Restore the user's scroll on the next frame, after the new DOM lays out.
+  requestAnimationFrame(() => window.scrollTo({ top: scrollY, behavior: 'instant' }));
 }
 
 // ── Comments live-refresh ──────────────────────────────────────────────────
@@ -1311,8 +1336,14 @@ function _startCommentsPoll(id) {
       }
       // Re-render in place. _renderViewer guards on _viewerLoadToken so a
       // concurrent navigation away will short-circuit before touching DOM.
+      // Preserve scroll: a teammate's comment shouldn't yank the reader away
+      // from where they're reading.
       const cur = _cacheGet(id);
-      if (cur) _renderViewer(id, cur.payload, fresh, _viewerLoadToken);
+      if (cur) {
+        const scrollY = window.scrollY;
+        _renderViewer(id, cur.payload, fresh, _viewerLoadToken);
+        requestAnimationFrame(() => window.scrollTo({ top: scrollY, behavior: 'instant' }));
+      }
     } catch {
       // Network blip — keep polling, don't toast (would spam).
     }
