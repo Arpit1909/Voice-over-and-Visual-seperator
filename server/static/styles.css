@@ -1477,7 +1477,7 @@ body::before {
   box-shadow: var(--shadow-sm);
 }
 
-/* Sticky header row — same warm-pink banner as the PDF export. */
+/* Sticky header row — light-blue VO/Visuals banner. */
 .script-table-head {
   grid-column: 1 / -1;
   display: grid;
@@ -1485,8 +1485,8 @@ body::before {
   position: sticky;
   top: 0;
   z-index: 4;
-  background: #f4b8b8;
-  border-bottom: 1px solid #d99696;
+  background: #cfe2f3;
+  border-bottom: 1px solid #9fc1e0;
 }
 .script-table-head-cell {
   font-family: var(--font-body);
@@ -1497,7 +1497,7 @@ body::before {
   text-align: center;
   padding: 12px 16px;
 }
-.script-table-head-cell--vo  { border-right: 1px solid #d99696; }
+.script-table-head-cell--vo  { border-right: 1px solid #9fc1e0; }
 .script-table-head-cell--vis { /* no extra border */ }
 
 /* Section banners hidden — beats now flow continuously. */
