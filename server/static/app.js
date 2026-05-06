@@ -1272,43 +1272,55 @@ async function _deleteComment(cid) {
 }
 
 async function _refetchAndRerender() {
-  // Re-paint the viewer with fresh comments WITHOUT touching scroll position
-  // or refetching the analysis payload — only comments change on add/edit/
-  // delete/resolve, and a full openViewer() jumps the page back to the top.
+  // Silent in-place refresh: fetch new comments, swap only the highlight HTML
+  // inside the existing field elements, never re-render the viewer or reset
+  // the player. Scroll position cannot move because nothing layouts.
   const h = window.location.hash;
   if (!h.startsWith('#/view/')) return;
   const id = h.slice('#/view/'.length);
   const cached = _cacheGet(id);
   if (!cached?.payload) {
-    // No cached payload — fall back to a full reload (rare; happens if the
-    // viewer was opened, then the cache evicted before the action ran).
+    // Fall back only when the cache was evicted between viewer-open and now.
     _cacheInvalidate(id);
     return openViewer(id);
   }
-
-  // Capture scroll from BOTH possible scrollers (some browsers report on body,
-  // others on the documentElement) so we can restore reliably.
-  const scrollY = window.scrollY || window.pageYOffset
-                  || document.documentElement.scrollTop
-                  || document.body.scrollTop || 0;
   try {
     const fresh = await api(`/api/results/${id}/comments`);
     cached.comments = fresh;
     _cacheSet(id, cached);
-    _renderViewer(id, cached.payload, fresh, _viewerLoadToken);
+    _patchCommentsInPlace(fresh.items || []);
     _commentsPollSig = _commentsSignature(fresh.items || []);
   } catch (e) {
     toast(`Could not refresh: ${e.message}`, 'error');
-    return;
   }
-  // Restore by direct property assignment — bypasses any CSS smooth-scroll.
-  // Run twice across two animation frames to outpace late layout shifts
-  // (font-swap, image load, popover removal) that would otherwise reset us.
-  const restore = () => {
-    document.documentElement.scrollTop = scrollY;
-    document.body.scrollTop = scrollY;
-  };
-  requestAnimationFrame(() => { restore(); requestAnimationFrame(restore); });
+}
+
+// Swap ONLY the comment-highlight markup inside each [data-comment-field],
+// leaving every other DOM node — including the player, the headers, the
+// scroll position — untouched. textContent strips existing <mark> wrappers
+// and gives back the raw text whose offsets the comments were anchored to,
+// so re-rendering is safe and idempotent.
+function _patchCommentsInPlace(items) {
+  _indexComments(items);
+
+  // beat_index → field → comments[]
+  const byBeatField = {};
+  for (const c of (items || [])) {
+    if (c.resolved || !c.field) continue;
+    const m = byBeatField[c.beat_index] = byBeatField[c.beat_index] || {};
+    (m[c.field] = m[c.field] || []).push(c);
+  }
+
+  document.querySelectorAll('.beat [data-comment-field]').forEach(el => {
+    const beatEl = el.closest('.beat');
+    if (!beatEl) return;
+    const idx = parseInt((beatEl.id || '').replace('beat-', ''), 10);
+    if (Number.isNaN(idx)) return;
+    const field = el.dataset.commentField;
+    const fieldComments = byBeatField[idx]?.[field] || [];
+    const rawText = el.textContent; // <mark> children flatten to plain text
+    el.innerHTML = renderHighlighted(rawText, fieldComments);
+  });
 }
 
 // ── Comments live-refresh ──────────────────────────────────────────────────
@@ -1341,20 +1353,9 @@ function _startCommentsPoll(id) {
         cached.comments = fresh;
         _cacheSet(id, cached);
       }
-      // Re-render in place. _renderViewer guards on _viewerLoadToken so a
-      // concurrent navigation away will short-circuit before touching DOM.
-      // Preserve scroll: a teammate's comment shouldn't yank the reader away
-      // from where they're reading.
-      const cur = _cacheGet(id);
-      if (cur) {
-        const scrollY = window.scrollY || document.documentElement.scrollTop || 0;
-        _renderViewer(id, cur.payload, fresh, _viewerLoadToken);
-        const restore = () => {
-          document.documentElement.scrollTop = scrollY;
-          document.body.scrollTop = scrollY;
-        };
-        requestAnimationFrame(() => { restore(); requestAnimationFrame(restore); });
-      }
+      // Silent in-place patch — never re-renders the viewer, can't shift
+      // scroll position. A teammate's add/edit/delete just appears.
+      _patchCommentsInPlace(fresh.items || []);
     } catch {
       // Network blip — keep polling, don't toast (would spam).
     }
