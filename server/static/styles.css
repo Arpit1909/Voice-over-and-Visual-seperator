@@ -1165,14 +1165,13 @@ body::before {
 .export-group .btn-ghost:hover { background: var(--accent-soft); color: var(--accent); }
 
 /* Two-column viewer: script table on the left, sticky video player on the
-   right. Same minimal layout as the PDF export — VO and Visuals as the only
-   two columns, comments as inline highlights you click to expand. */
+   right. Player rail is now noticeably bigger — clamp 480-720px. */
 .viewer-layout {
   max-width: none;
   margin: 0;
   padding: clamp(18px, 1.8vw, 32px) clamp(20px, 2.4vw, 44px) 80px;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) clamp(380px, 28vw, 520px);
+  grid-template-columns: minmax(0, 1fr) clamp(480px, 36vw, 720px);
   gap: clamp(20px, 1.8vw, 32px);
   align-items: start;
 }
