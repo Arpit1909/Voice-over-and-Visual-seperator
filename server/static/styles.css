@@ -1155,7 +1155,27 @@ body::before {
   align-items: start;
 }
 .viewer-script-pane { min-width: 0; }
-.viewer-player-pane { position: sticky; top: 18px; }
+
+/* Player rail — sticky on every screen size so it always follows the reader.
+   On wide layouts it sits in the right column and tops out at 18px from the
+   viewport top. When the layout collapses to a single column (below ~1100px),
+   the rail moves above the script and becomes a sticky banner that pins to
+   the top edge so scrolling the script keeps the video visible. */
+.viewer-player-pane {
+  position: sticky;
+  top: 18px;
+  align-self: start;
+  z-index: 10;
+  max-height: calc(100vh - 36px);
+  overflow: visible;
+}
+.viewer-player-pane .player-card {
+  max-height: calc(100vh - 36px);
+  display: flex;
+  flex-direction: column;
+}
+.viewer-player-pane .player-wrap { flex: 0 0 auto; }
+.viewer-player-pane .player-footer { flex: 0 0 auto; }
 .player-card {
   background: var(--panel);
   border: 1px solid var(--border);
@@ -1238,10 +1258,11 @@ body::before {
 .section-header {
   display: flex;
   align-items: baseline;
-  gap: 16px;
-  padding: 0 0 12px;
-  margin: 40px 0 18px;
+  gap: clamp(12px, 1.2vw, 20px);
+  padding: 0 0 clamp(10px, 0.8vw, 14px);
+  margin: clamp(28px, 3vw, 48px) 0 clamp(14px, 1.4vw, 22px);
   border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
 }
 .section-header:first-child { margin-top: 0; }
 .section-number {
@@ -1276,8 +1297,8 @@ body::before {
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 18px 22px 20px;
-  margin-bottom: 14px;
+  padding: clamp(14px, 1.4vw, 22px) clamp(16px, 1.6vw, 26px) clamp(16px, 1.6vw, 24px);
+  margin-bottom: clamp(10px, 1vw, 16px);
   cursor: pointer;
   transition: border-color .15s, box-shadow .2s, transform .12s;
 }
@@ -1373,11 +1394,11 @@ body::before {
   opacity: .9;
 }
 
-/* Body grid */
+/* Body grid — auto-stacks when columns would each be narrower than ~280px */
 .beat-body {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 22px;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: clamp(14px, 1.6vw, 26px);
   min-width: 0;
 }
 
@@ -1831,9 +1852,32 @@ body::before {
 @media (max-width: 1280px) {
   :root { --sidebar-w: clamp(240px, 20vw, 280px); }
 }
+/* Below ~1100px: collapse to single column. The player still sticks to the
+   top of the viewport so it scrolls with the script underneath. We cap its
+   height to roughly half the viewport so the script is always visible too. */
 @media (max-width: 1100px) {
   .viewer-layout { grid-template-columns: 1fr; }
-  .viewer-player-pane { position: static; order: -1; }
+  .viewer-player-pane {
+    order: -1;
+    position: sticky;
+    top: 0;
+    max-height: 60vh;
+    margin: 0 calc(clamp(20px, 3vw, 56px) * -1);
+    /* slight backdrop so beats peeking out below stay visible behind the rail */
+    background: var(--bg);
+    padding: 8px clamp(20px, 3vw, 56px);
+    border-bottom: 1px solid var(--line);
+  }
+  .viewer-player-pane .player-card {
+    max-height: calc(60vh - 16px);
+    border-radius: var(--radius);
+  }
+  /* Keep the 16:9 aspect ratio but cap by max-height so the video doesn't
+     dominate on tiny laptops. */
+  .viewer-player-pane .player-wrap {
+    padding-bottom: 0;
+    height: clamp(180px, 32vh, 300px);
+  }
 }
 @media (max-width: 900px) {
   :root { --sidebar-w: 100%; }
@@ -1856,6 +1900,11 @@ body::before {
   .viewer-header { flex-direction: column; align-items: flex-start; }
   .viewer-actions { width: 100%; }
   .export-group { flex: 1; }
+  /* On phones the sticky player gets a tighter cap so the script stays
+     readable below it. */
+  .viewer-player-pane { max-height: 45vh; }
+  .viewer-player-pane .player-card { max-height: calc(45vh - 16px); }
+  .viewer-player-pane .player-wrap { height: clamp(140px, 26vh, 220px); }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
