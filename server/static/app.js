@@ -1286,22 +1286,29 @@ async function _refetchAndRerender() {
     return openViewer(id);
   }
 
-  const scrollY = window.scrollY;
+  // Capture scroll from BOTH possible scrollers (some browsers report on body,
+  // others on the documentElement) so we can restore reliably.
+  const scrollY = window.scrollY || window.pageYOffset
+                  || document.documentElement.scrollTop
+                  || document.body.scrollTop || 0;
   try {
     const fresh = await api(`/api/results/${id}/comments`);
     cached.comments = fresh;
     _cacheSet(id, cached);
     _renderViewer(id, cached.payload, fresh, _viewerLoadToken);
-    // Resync the poll signature so the next tick doesn't double-render the
-    // change we just applied locally.
     _commentsPollSig = _commentsSignature(fresh.items || []);
   } catch (e) {
     toast(`Could not refresh: ${e.message}`, 'error');
     return;
   }
-  // Re-renders rebuild #viewer-script's innerHTML which can shift layout.
-  // Restore the user's scroll on the next frame, after the new DOM lays out.
-  requestAnimationFrame(() => window.scrollTo({ top: scrollY, behavior: 'instant' }));
+  // Restore by direct property assignment — bypasses any CSS smooth-scroll.
+  // Run twice across two animation frames to outpace late layout shifts
+  // (font-swap, image load, popover removal) that would otherwise reset us.
+  const restore = () => {
+    document.documentElement.scrollTop = scrollY;
+    document.body.scrollTop = scrollY;
+  };
+  requestAnimationFrame(() => { restore(); requestAnimationFrame(restore); });
 }
 
 // ── Comments live-refresh ──────────────────────────────────────────────────
@@ -1340,9 +1347,13 @@ function _startCommentsPoll(id) {
       // from where they're reading.
       const cur = _cacheGet(id);
       if (cur) {
-        const scrollY = window.scrollY;
+        const scrollY = window.scrollY || document.documentElement.scrollTop || 0;
         _renderViewer(id, cur.payload, fresh, _viewerLoadToken);
-        requestAnimationFrame(() => window.scrollTo({ top: scrollY, behavior: 'instant' }));
+        const restore = () => {
+          document.documentElement.scrollTop = scrollY;
+          document.body.scrollTop = scrollY;
+        };
+        requestAnimationFrame(() => { restore(); requestAnimationFrame(restore); });
       }
     } catch {
       // Network blip — keep polling, don't toast (would spam).
@@ -1385,7 +1396,22 @@ function setupCommentSelection() {
     _hidePopover();
   });
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') { _hidePopover(); _hideFloatingAdd(); }
+    if (e.key === 'Escape') { _hidePopover(); _hideFloatingAdd(); return; }
+
+    // Space-bar = play/pause the analysis video, but only when the user isn't
+    // typing into a comment field, an input, or has another modifier held.
+    if (e.code === 'Space' && !e.repeat && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      const t = e.target;
+      const typing = t && (
+        t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' ||
+        t.isContentEditable || t.closest?.('.cmt-popover')
+      );
+      if (typing) return;
+      if (window._player?.togglePlay) {
+        e.preventDefault();   // stop the page from scrolling on space
+        window._player.togglePlay();
+      }
+    }
   });
 }
 
@@ -1551,6 +1577,16 @@ function mountLocalVideo(id, wrap, onTime) {
         if (window.innerWidth < 1100) wrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
       } catch { /* */ }
     },
+    togglePlay() {
+      try {
+        if (video.paused) {
+          const p = video.play();
+          if (p && p.catch) p.catch(() => { /* autoplay block — ignore */ });
+        } else {
+          video.pause();
+        }
+      } catch { /* */ }
+    },
   };
 
   _viewerCleanup = () => {
@@ -1615,6 +1651,12 @@ function mountYouTubeEmbed(ytId, wrap, onTime, fallback) {
                   ytPlayer.playVideo();
                   onTime(target); // optimistic highlight (don't wait for the next poll tick)
                   if (window.innerWidth < 1100) wrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                } catch { /* */ }
+              },
+              togglePlay() {
+                try {
+                  const playing = ytPlayer.getPlayerState() === 1; // YT.PlayerState.PLAYING
+                  if (playing) ytPlayer.pauseVideo(); else ytPlayer.playVideo();
                 } catch { /* */ }
               },
             };
