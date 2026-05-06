@@ -893,9 +893,18 @@ function _renderViewer(id, payload, comments, token) {
     });
   });
 
-  // Render script
+  // Render script as a paired-column table (VO | Visuals) to match the PDF
+  // export format. The header row sits at the top once; sections become
+  // banded full-width strips; each beat is one row with two aligned cells.
   const root = $('#viewer-script');
-  root.innerHTML = beats.map((entry, gi) => renderBeat(entry, gi, beats, commentsByBeat[gi] || [])).join('') + renderSummary(data);
+  const tableHead = `
+    <div class="script-table-head">
+      <div class="script-table-head-cell script-table-head-cell--vo">VO · Voice-over</div>
+      <div class="script-table-head-cell script-table-head-cell--vis">Visuals · On-screen</div>
+    </div>`;
+  root.innerHTML = tableHead +
+    beats.map((entry, gi) => renderBeat(entry, gi, beats, commentsByBeat[gi] || [])).join('') +
+    renderSummary(data);
 
   // Wire seek handlers + comment forms
   attachViewerHandlers(id, root, beats);

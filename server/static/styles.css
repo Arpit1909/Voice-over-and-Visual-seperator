@@ -1426,15 +1426,56 @@ body::before {
 /* ═══════════════════════════════════════════════════════════════════════════
    SECTIONS & BEATS (script grid)
    ═══════════════════════════════════════════════════════════════════════════ */
+/* Script pane is a 2-column table (VO | Visuals), like the PDF export. */
+.viewer-script-pane {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+}
+
+/* Sticky header row at the top of the table — VO | Visuals labels in copper. */
+.script-table-head {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  background: var(--accent-soft);
+  border-bottom: 1px solid var(--accent-line);
+}
+.script-table-head-cell {
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: var(--accent);
+  text-transform: uppercase;
+  text-align: center;
+  padding: 10px 16px;
+  font-variation-settings: 'opsz' 18;
+}
+.script-table-head-cell--vo  { border-right: 1px solid var(--accent-line); }
+.script-table-head-cell--vis { /* no extra border */ }
+
+/* Section banner — full-width strip between groups of beats. */
 .section-header {
+  grid-column: 1 / -1;
   display: flex;
   align-items: baseline;
-  gap: clamp(12px, 1.2vw, 20px);
-  padding: 0 0 clamp(10px, 0.8vw, 14px);
-  margin: clamp(28px, 3vw, 48px) 0 clamp(14px, 1.4vw, 22px);
+  gap: 14px;
+  padding: 12px 18px;
+  margin: 0;
+  background: var(--panel-soft);
+  border-top: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
   flex-wrap: wrap;
 }
+.section-header:first-of-type { border-top: none; }
 .section-header:first-child { margin-top: 0; }
 .section-number {
   font-family: var(--font-mono);
@@ -1462,25 +1503,31 @@ body::before {
   color: var(--text-3);
 }
 
-/* The beat — now a transparent grouping container; VO and Visual are real
-   cards inside. The beat itself is just a header strip + the two cards. */
+/* The beat is invisible to layout — its children (.beat-head, .beat-body)
+   flow directly into the grid as table rows / cells. */
 .beat {
-  position: relative;
-  background: transparent;
-  border: none;
-  border-radius: 0;
-  padding: 0;
-  margin-bottom: clamp(18px, 2vw, 32px);
-  cursor: default;
+  display: contents;
 }
-.beat--active::before {
-  content: "";
-  position: absolute;
-  left: 0; top: 0; bottom: clamp(18px, 2vw, 32px);
-  width: 3px;
-  border-radius: 2px;
-  background: linear-gradient(180deg, var(--accent), var(--accent-hi));
-  z-index: 1;
+/* Beat-head used to carry Beat# / type / timestamp pills above each row.
+   The PDF doesn't show those in-table, so we span them across both columns
+   as a slim sub-banner above the row. */
+.beat-head {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 8px 18px;
+  margin: 0;
+  background: var(--bg);
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  font-size: 11px;
+}
+.beat-head:first-of-type { border-top: none; }
+.beat--active .beat-head {
+  background: var(--accent-soft);
+  border-color: var(--accent-line);
 }
 
 .beat-head {
@@ -1560,49 +1607,35 @@ body::before {
   opacity: .9;
 }
 
-/* Body grid — VO and Visual sit side-by-side at every wide-screen size so
-   the script area uses the full page width. Stacks only on narrow viewports
-   (handled in the @media (max-width:900px) block). */
+/* Beat-body becomes a transparent passthrough so its two children land in
+   columns 1 and 2 of the parent table grid. */
 .beat-body {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: clamp(14px, 1.4vw, 22px);
-  min-width: 0;
+  display: contents;
 }
 
-/* Each column is now its own elevated card. */
+/* VO and Visual are now plain table cells — no card chrome, just padding
+   and a divider line. Top-aligned so paired content lines up. */
 .vo-col, .vis-col {
-  display: flex;
-  flex-direction: column;
   background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: clamp(14px, 1.2vw, 20px) clamp(16px, 1.4vw, 22px);
+  padding: 14px 18px 18px;
   min-width: 0;
-  box-shadow: var(--shadow-sm);
-  transition: border-color .15s, box-shadow .2s;
-  position: relative;
+  border-bottom: 1px solid var(--border);
   cursor: pointer;
+  transition: background .12s;
+  position: relative;
 }
-.vo-col:hover, .vis-col:hover {
-  border-color: var(--border-strong);
-  box-shadow: 0 4px 14px rgba(20,20,18,.06);
-}
-/* Left edge accent ribbon — subtle identity for VO vs Visual. */
-.vo-col::before, .vis-col::before {
-  content: "";
-  position: absolute;
-  left: -1px; top: -1px; bottom: -1px;
-  width: 3px;
-  border-top-left-radius: var(--radius);
-  border-bottom-left-radius: var(--radius);
-}
-.vo-col::before  { background: var(--vo-border); }
-.vis-col::before { background: var(--vis-border); }
+.vo-col  { border-right: 1px solid var(--border); }
+.vis-col { /* right edge of table — no extra border */ }
+.vo-col:hover, .vis-col:hover { background: var(--panel-hi); }
+
+/* Active row — both cells get a soft copper wash + cells of THIS beat
+   share the identifying ribbon along the left edge of the VO cell. */
 .beat--active .vo-col,
 .beat--active .vis-col {
-  border-color: var(--accent-line);
-  box-shadow: 0 0 0 1px var(--accent-line), 0 6px 24px rgba(184,90,57,.10);
+  background: var(--accent-soft);
+}
+.beat--active .vo-col {
+  box-shadow: inset 3px 0 0 var(--accent);
 }
 
 .col-header {
@@ -1610,19 +1643,12 @@ body::before {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
 }
 .vo-header, .vis-header { background: transparent; }
-.col-label {
-  font-family: var(--font-display);
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  font-variation-settings: 'opsz' 18;
-}
-.vo-col  .col-label { color: var(--vo-label); }
-.vis-col .col-label { color: var(--vis-label); }
+/* The "VO · Voice-over" label is redundant once the table has a header
+   row up top — hide it inside cells to mirror the PDF look. */
+.col-label { display: none; }
 
 .ts-badge {
   font-family: var(--font-mono);
@@ -2043,9 +2069,17 @@ body::before {
    ═══════════════════════════════════════════════════════════════════════════ */
 @media (max-width: 1280px) {
   :root { --sidebar-w: clamp(240px, 20vw, 280px); }
-  /* On laptop/standard-desktop widths, stack VO above Visual so each card
-     gets the full width of the script column instead of getting squeezed. */
-  .beat-body { grid-template-columns: 1fr; }
+}
+
+/* Small / narrow viewports: collapse the script-table to a single column
+   (VO row, then Visual row, alternating) so neither cell becomes unreadably
+   narrow. The header row hides since both cells would just stack labels. */
+@media (max-width: 720px) {
+  .viewer-script-pane { grid-template-columns: 1fr; }
+  .script-table-head { display: none; }
+  .vo-col  { border-right: none; border-bottom: 1px dashed var(--line); }
+  .vis-col { border-bottom: 2px solid var(--border); }
+  .beat--active .vo-col { box-shadow: inset 3px 0 0 var(--accent); }
 }
 /* Below ~1100px: collapse to single column. The player still sticks to the
    top of the viewport so it scrolls with the script underneath. */
@@ -2084,9 +2118,7 @@ body::before {
   .history-list { max-height: 220px; }
   .view, .viewer-layout { padding-left: 18px; padding-right: 18px; }
   .viewer-header { padding: 20px 18px; }
-  .beat { padding: 16px 18px; }
-  .beat-body { grid-template-columns: 1fr; gap: 16px; }
-  .vo-col, .vis-col { padding-left: 14px; }
+  .vo-col, .vis-col { padding: 12px 14px; }
 }
 @media (max-width: 640px) {
   .view-header h1 { font-size: clamp(24px, 6vw, 32px); }
