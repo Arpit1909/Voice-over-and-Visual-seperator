@@ -935,6 +935,11 @@ function _renderViewer(id, payload, comments, token) {
 
   // Restore saved player width and wire the drag-to-resize handle.
   _setupPlayerResize();
+
+  // Track which beat is currently in view — drives the contextual comments
+  // panel below the video player.
+  _wireBeatVisibilityTracking();
+  _renderPlayerComments();
 }
 
 // ── Resizable video player (drag handle on the player pane's left edge) ────
@@ -1482,84 +1487,110 @@ function _patchCommentsInPlace(items) {
     el.innerHTML = renderHighlighted(rawText, fieldComments);
   });
 
-  _renderMarginComments(items);
+  _renderPlayerComments();
 }
 
-// ── Margin comments (Google-Docs-style next to the row) ────────────────────
-function _renderMarginComments(items) {
-  const pane    = document.getElementById('margin-comments-pane');
-  const emptyEl = document.getElementById('margin-comments-empty');
-  if (!pane) return;
-  // Pane is hidden via CSS on viewports below 1500px — bail out cheaply.
-  if (getComputedStyle(pane).display === 'none') return;
+// ── Contextual comments panel below the video player ──────────────────────
+// Shows only the comments on the beat the user is currently looking at.
+// Updates as the user scrolls (IntersectionObserver) or as the playing
+// beat changes (set by makeTimeTracker → _setActiveBeatForComments).
+let _focusedBeatIdx = -1;        // which beat the comments panel currently shows
+let _scriptObserver = null;       // IntersectionObserver across all beat cells
 
-  const live = (items || []).filter(c => !c.resolved);
-  if (emptyEl) emptyEl.style.display = live.length ? 'none' : '';
+function _setFocusedBeat(idx, { explicit = false } = {}) {
+  if (idx === _focusedBeatIdx && !explicit) return;
+  _focusedBeatIdx = idx;
+  _renderPlayerComments();
+}
 
-  // Drop any previously rendered cards (keep the empty state element).
-  pane.querySelectorAll('.margin-comment').forEach(el => el.remove());
+// Called by the time-tracker every time the active beat changes during
+// playback — keeps the contextual panel synced with what's playing.
+function _setActiveBeatForComments(idx) { _setFocusedBeat(idx); }
 
-  if (!live.length) return;
+function _renderPlayerComments() {
+  const titleEl = document.getElementById('player-comments-title');
+  const countEl = document.getElementById('player-comments-count');
+  const listEl  = document.getElementById('player-comments-list');
+  if (!listEl) return;
 
-  // Build a card per comment (DOM order doesn't matter — we'll position absolutely).
-  const built = [];
-  for (const c of live) {
-    const anchor = document.querySelector(`mark.cmt-highlight[data-cid="${c.id}"]`)
-                || document.getElementById(`beat-${c.beat_index}`);
-    if (!anchor) continue;
-
-    const card = document.createElement('button');
-    card.type = 'button';
-    card.className = 'margin-comment';
-    card.dataset.cid = c.id;
-    const quoteHtml = c.quote ? `<div class="margin-comment-quote">"${esc(c.quote)}"</div>` : '';
-    card.innerHTML = `
-      ${quoteHtml}
-      <div class="margin-comment-meta">
-        <span class="margin-comment-author">${esc(c.author || 'Anonymous')}</span>
-        <span class="margin-comment-time">${esc(fmtRel(c.created_at))}</span>
-      </div>
-      <div class="margin-comment-body">${esc(c.body || '')}</div>`;
-    card.addEventListener('click', () => _focusComment(c.id));
-    pane.appendChild(card);
-    built.push({ card, anchor });
+  const idx = _focusedBeatIdx;
+  if (idx < 0) {
+    if (titleEl) titleEl.textContent = 'No beat selected';
+    if (countEl) countEl.textContent = '0';
+    listEl.innerHTML = `<p class="player-comments-empty">Scroll through the script — comments on the visible beat appear here.</p>`;
+    return;
   }
 
-  _positionMarginComments(pane, built);
-}
+  const beatComments = Object.values(_commentsCache)
+    .filter(c => c.beat_index === idx);
+  const live = beatComments.filter(c => !c.resolved);
 
-function _positionMarginComments(pane, built) {
-  if (!built.length) return;
-  const paneRect = pane.getBoundingClientRect();
-  const paneTopY = paneRect.top + window.scrollY;
+  if (titleEl) titleEl.textContent = `Beat ${idx + 1}`;
+  if (countEl) countEl.textContent = String(live.length);
 
-  // Initial top = vertical position of each anchor relative to the pane.
-  const rows = built.map(({ card, anchor }) => {
-    const top = anchor.getBoundingClientRect().top + window.scrollY - paneTopY;
-    card.style.top = `${Math.max(0, top)}px`;
-    return { card, top };
-  });
-
-  // Resolve overlaps: sort by initial top, push each card down to leave at
-  // least 8px gap below the previous one. Layout twice — once to measure
-  // heights, once to push.
-  rows.sort((a, b) => a.top - b.top);
-  let prevBottom = -8;
-  for (const r of rows) {
-    const finalTop = Math.max(r.top, prevBottom + 8);
-    r.card.style.top = `${finalTop}px`;
-    prevBottom = finalTop + r.card.offsetHeight;
+  if (!beatComments.length) {
+    listEl.innerHTML = `<p class="player-comments-empty">No comments on this beat yet. Select any text to add one.</p>`;
+    return;
   }
+
+  beatComments.sort((a, b) => (b.created_at || 0) - (a.created_at || 0));
+
+  listEl.innerHTML = beatComments.map(c => {
+    const quote   = c.quote ? `<div class="player-comment-quote">"${esc(c.quote)}"</div>` : '';
+    const resCls  = c.resolved ? ' player-comment--resolved' : '';
+    const resPill = c.resolved ? `<span class="player-comment-resolved">resolved</span>` : '';
+    return `
+      <button class="player-comment${resCls}" data-cid="${c.id}" type="button">
+        ${quote}
+        <div class="player-comment-meta">
+          <span class="player-comment-author">${esc(c.author || 'Anonymous')}</span>
+          <span class="player-comment-time">${esc(fmtRel(c.created_at))}</span>
+          ${resPill}
+        </div>
+        <div class="player-comment-body">${esc(c.body || '')}</div>
+      </button>`;
+  }).join('');
+
+  listEl.querySelectorAll('.player-comment').forEach(btn => {
+    btn.addEventListener('click', () => _focusComment(parseInt(btn.dataset.cid, 10)));
+  });
 }
 
-// Reposition margin comments on resize (column widths shift, anchors move).
-let _marginResizeHandle = null;
-window.addEventListener('resize', () => {
-  if (_marginResizeHandle) cancelAnimationFrame(_marginResizeHandle);
-  _marginResizeHandle = requestAnimationFrame(() => {
-    _renderMarginComments(Object.values(_commentsCache));
+// IntersectionObserver across all beat cells — picks the most-visible beat
+// as you scroll. Wired once per viewer render.
+function _wireBeatVisibilityTracking() {
+  if (_scriptObserver) { _scriptObserver.disconnect(); _scriptObserver = null; }
+
+  // .vo-col / .vis-col are the real boxes (their parent .beat is display:contents).
+  const cells = Array.from(document.querySelectorAll('.beat .vo-col, .beat .vis-col'));
+  if (!cells.length) return;
+
+  const visibility = new Map(); // beatIdx -> intersectionRatio (max across cells)
+
+  _scriptObserver = new IntersectionObserver((entries) => {
+    for (const entry of entries) {
+      const beatEl = entry.target.closest('.beat');
+      if (!beatEl) continue;
+      const idx = parseInt((beatEl.id || '').replace('beat-', ''), 10);
+      if (Number.isNaN(idx)) continue;
+      const cur = visibility.get(idx) || 0;
+      visibility.set(idx, Math.max(cur, entry.isIntersecting ? entry.intersectionRatio : 0));
+    }
+    // Pick the beat with the highest visible ratio. Ignore tiny slivers.
+    let bestIdx = -1, bestRatio = 0.05;
+    for (const [idx, ratio] of visibility) {
+      if (ratio > bestRatio) { bestRatio = ratio; bestIdx = idx; }
+    }
+    if (bestIdx >= 0) _setFocusedBeat(bestIdx);
+  }, {
+    // Only consider beats that overlap the middle 60% of the viewport so the
+    // "current beat" matches what the user is actually reading.
+    rootMargin: '-20% 0% -20% 0%',
+    threshold: [0, 0.25, 0.5, 0.75, 1],
   });
-});
+
+  cells.forEach(c => _scriptObserver.observe(c));
+}
 
 function _focusComment(cid) {
   if (!Number.isFinite(cid)) return;
@@ -1878,10 +1909,11 @@ function makeTimeTracker(beats) {
       const el = $(`#beat-${i}`);
       el?.classList.add('beat--active');
       $('#cur-beat').textContent = `#${i + 1}`;
+      // Sync the contextual comments panel to the playing beat.
+      try { _setActiveBeatForComments(i); } catch { /* */ }
       // Auto-scroll to the active beat. The .beat element itself uses
-      // display:contents (so its kids land in the table grid), which
-      // means it has no box for scrollIntoView to target. Scroll to its
-      // first real cell (vo-col / vis-col) instead.
+      // display:contents, which means it has no box for scrollIntoView
+      // to target. Scroll to its first real cell instead.
       if (i !== lastScrollIdx) {
         const scrollTarget = el?.querySelector('.vo-col, .vis-col') || el;
         scrollTarget?.scrollIntoView({ behavior: 'smooth', block: 'center' });

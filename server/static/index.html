@@ -217,15 +217,6 @@
           <!-- beats injected here -->
         </div>
 
-        <!-- Google-Docs-style margin comments: each comment is positioned
-             absolutely at the vertical offset of its anchor highlight in
-             the script, so it lines up next to the row it's commenting on. -->
-        <aside class="margin-comments-pane" id="margin-comments-pane" aria-label="Comments">
-          <div class="margin-comments-empty" id="margin-comments-empty">
-            No comments yet. Select any text in a beat to add one.
-          </div>
-        </aside>
-
         <aside class="viewer-player-pane">
           <div class="player-card">
             <div class="player-card-header">
@@ -245,6 +236,20 @@
               </label>
             </div>
           </div>
+
+          <!-- Contextual comments — only shows comments on the beat the user
+               is currently looking at. Tracked via IntersectionObserver +
+               video-playback active-beat. Updates as you scroll the script
+               or as the video advances. -->
+          <section class="player-comments" id="player-comments" aria-label="Comments on current beat">
+            <header class="player-comments-head">
+              <span class="player-comments-title" id="player-comments-title">No beat selected</span>
+              <span class="player-comments-count" id="player-comments-count">0</span>
+            </header>
+            <div class="player-comments-list" id="player-comments-list">
+              <p class="player-comments-empty">Scroll through the script — comments on the visible beat appear here.</p>
+            </div>
+          </section>
         </aside>
       </div>
     </section>
