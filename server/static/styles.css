@@ -1165,28 +1165,21 @@ body::before {
 .export-group .btn-ghost:hover { background: var(--accent-soft); color: var(--accent); }
 
 /* Three-column viewer: script | margin comments | sticky player.
-   Player stays big (clamp 480-720). Margin column gets a fixed slice and
-   hides automatically on narrower viewports (handled below 1500px). */
+   Uses fr ratios so the LAYOUT looks identical at every screen size — a
+   27" desktop just shows the same proportional view scaled up, and a
+   13" laptop the same proportional view scaled down. minmax() guarantees
+   sensible minimums so nothing collapses unreadably. */
 .viewer-layout {
   max-width: none;
   margin: 0;
-  padding: clamp(18px, 1.8vw, 32px) clamp(20px, 2.4vw, 44px) 80px;
+  padding: clamp(16px, 1.5vw, 32px) clamp(18px, 2vw, 40px) 80px;
   display: grid;
   grid-template-columns:
-    minmax(0, 1fr)                 /* script */
-    clamp(260px, 18vw, 340px)      /* margin comments */
-    clamp(480px, 32vw, 680px);     /* player — stays big */
-  gap: clamp(16px, 1.4vw, 28px);
+    minmax(0, 1.5fr)              /* script  ≈ 45 %  */
+    minmax(220px, 0.7fr)          /* margin  ≈ 21 %  */
+    minmax(400px, 1.1fr);         /* player  ≈ 34 %  */
+  gap: clamp(14px, 1.4vw, 24px);
   align-items: start;
-}
-
-/* Below 1500 viewport: drop the margin column. Comments still appear
-   inline as highlights you can click to open the popover. */
-@media (max-width: 1500px) {
-  .viewer-layout {
-    grid-template-columns: minmax(0, 1fr) clamp(480px, 36vw, 720px);
-  }
-  .margin-comments-pane { display: none; }
 }
 .viewer-script-pane { min-width: 0; }
 
@@ -2097,9 +2090,8 @@ body::before {
   .vis-col { border-bottom: 2px solid var(--border); }
   .beat--active .vo-col { box-shadow: inset 3px 0 0 var(--accent); }
 }
-/* Below ~1280px: collapse the 3-column layout to a single column. Margin
-   comments hide (they don't make sense without their reference column);
-   the comments still appear in the script via highlights and the popover. */
+/* Below 1280px: only adaptive shift in the whole app — collapse the 3-col
+   to a single column with the player as a sticky banner at the top. */
 @media (max-width: 1280px) {
   .viewer-layout { grid-template-columns: 1fr; }
   .margin-comments-pane { display: none; }
