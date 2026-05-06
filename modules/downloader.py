@@ -165,20 +165,20 @@ def _download_youtube(url: str) -> tuple[str, str, dict]:
         cmd += ['--ffmpeg-location', ffmpeg]
     cmd.append(url)
 
-    try:
-        subprocess.run(cmd, check=True, env=env, capture_output=True, text=True)
-    except subprocess.CalledProcessError as e:
-        raise RuntimeError(
-            f"yt-dlp download failed.\n"
-            f"URL: {url}\n"
-            f"yt-dlp said: {(e.stderr or '').strip()[:1000]}\n"
-            f"Make sure ffmpeg + node are installed and cookies.txt is fresh."
-        ) from e
+    # Don't trust exit code alone — if a file landed in output_dir, the download
+    # succeeded even when yt-dlp returns non-zero due to GetPOT noise.
+    proc = subprocess.run(cmd, check=False, env=env, capture_output=True, text=True)
 
     files = [f for f in os.listdir(output_dir)
              if os.path.isfile(os.path.join(output_dir, f))]
     if not files:
-        raise RuntimeError("yt-dlp finished but no output file was produced.")
+        raise RuntimeError(
+            f"yt-dlp download failed.\n"
+            f"URL: {url}\n"
+            f"yt-dlp exit: {proc.returncode}\n"
+            f"yt-dlp said (last 2000 chars):\n{(proc.stderr or '').strip()[-2000:]}\n"
+            f"Make sure ffmpeg + node are installed and cookies.txt is fresh."
+        )
 
     path = os.path.join(output_dir, files[0])
     if not path.endswith('.mp4'):
@@ -187,23 +187,30 @@ def _download_youtube(url: str) -> tuple[str, str, dict]:
 
 
 def _yt_dump_json(url: str, env: dict) -> dict:
-    """Fetch video metadata. Single call with the same flag set as the download."""
+    """Fetch video metadata. Trusts stdout JSON regardless of exit code — yt-dlp
+    2026.x emits non-zero alongside floods of [GetPOT]/n-challenge warnings even
+    when the JSON was successfully extracted via a fallback client.
+    """
     cookies = _cookies_args()
-    try:
-        result = subprocess.run(
-            _ytdlp_cmd() + ['--dump-json'] + _YT_BASE_ARGS + cookies + [url],
-            capture_output=True, text=True, check=True, env=env,
-        )
-        return json.loads(result.stdout)
-    except subprocess.CalledProcessError as e:
-        stderr = (e.stderr or '').strip()
-        raise RuntimeError(
-            f"Could not fetch video info from YouTube.\n"
-            f"URL: {url}\n"
-            f"yt-dlp said: {stderr[:1000]}\n"
-            f"Cookies in use: {'yes' if cookies else 'NO — set YT_DLP_COOKIES or drop cookies.txt at project root'}\n"
-            f"If this persists, update yt-dlp:  pip install -U yt-dlp"
-        )
+    result = subprocess.run(
+        _ytdlp_cmd() + ['--dump-json'] + _YT_BASE_ARGS + cookies + [url],
+        capture_output=True, text=True, check=False, env=env,
+    )
+    out = result.stdout.strip()
+    if out:
+        try:
+            return json.loads(out)
+        except json.JSONDecodeError:
+            pass
+    stderr = (result.stderr or '').strip()
+    raise RuntimeError(
+        f"Could not fetch video info from YouTube.\n"
+        f"URL: {url}\n"
+        f"yt-dlp exit: {result.returncode}\n"
+        f"yt-dlp said (last 3000 chars):\n{stderr[-3000:]}\n"
+        f"Cookies in use: {'yes' if cookies else 'NO — set YT_DLP_COOKIES or drop cookies.txt at project root'}\n"
+        f"If this persists, update yt-dlp:  pip install -U yt-dlp"
+    )
 
 
 def _validate_local(path: str) -> tuple[str, str]:
