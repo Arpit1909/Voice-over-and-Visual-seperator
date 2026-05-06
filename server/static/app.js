@@ -1015,7 +1015,6 @@ ${sectionHeader}
       </div>
       <div class="col-content">
         <p class="vis-desc" data-comment-field="desc">${visDesc}</p>
-        ${dialogueBlock}
         ${ost}
         ${audio}
         ${summary}
@@ -1341,6 +1340,102 @@ function _patchCommentsInPlace(items) {
     const fieldComments = byBeatField[idx]?.[field] || [];
     const rawText = el.textContent; // <mark> children flatten to plain text
     el.innerHTML = renderHighlighted(rawText, fieldComments);
+  });
+
+  _renderMarginComments(items);
+}
+
+// ── Margin comments (Google-Docs-style next to the row) ────────────────────
+function _renderMarginComments(items) {
+  const pane    = document.getElementById('margin-comments-pane');
+  const emptyEl = document.getElementById('margin-comments-empty');
+  if (!pane) return;
+  // Pane is hidden via CSS on viewports below 1500px — bail out cheaply.
+  if (getComputedStyle(pane).display === 'none') return;
+
+  const live = (items || []).filter(c => !c.resolved);
+  if (emptyEl) emptyEl.style.display = live.length ? 'none' : '';
+
+  // Drop any previously rendered cards (keep the empty state element).
+  pane.querySelectorAll('.margin-comment').forEach(el => el.remove());
+
+  if (!live.length) return;
+
+  // Build a card per comment (DOM order doesn't matter — we'll position absolutely).
+  const built = [];
+  for (const c of live) {
+    const anchor = document.querySelector(`mark.cmt-highlight[data-cid="${c.id}"]`)
+                || document.getElementById(`beat-${c.beat_index}`);
+    if (!anchor) continue;
+
+    const card = document.createElement('button');
+    card.type = 'button';
+    card.className = 'margin-comment';
+    card.dataset.cid = c.id;
+    const quoteHtml = c.quote ? `<div class="margin-comment-quote">"${esc(c.quote)}"</div>` : '';
+    card.innerHTML = `
+      ${quoteHtml}
+      <div class="margin-comment-meta">
+        <span class="margin-comment-author">${esc(c.author || 'Anonymous')}</span>
+        <span class="margin-comment-time">${esc(fmtRel(c.created_at))}</span>
+      </div>
+      <div class="margin-comment-body">${esc(c.body || '')}</div>`;
+    card.addEventListener('click', () => _focusComment(c.id));
+    pane.appendChild(card);
+    built.push({ card, anchor });
+  }
+
+  _positionMarginComments(pane, built);
+}
+
+function _positionMarginComments(pane, built) {
+  if (!built.length) return;
+  const paneRect = pane.getBoundingClientRect();
+  const paneTopY = paneRect.top + window.scrollY;
+
+  // Initial top = vertical position of each anchor relative to the pane.
+  const rows = built.map(({ card, anchor }) => {
+    const top = anchor.getBoundingClientRect().top + window.scrollY - paneTopY;
+    card.style.top = `${Math.max(0, top)}px`;
+    return { card, top };
+  });
+
+  // Resolve overlaps: sort by initial top, push each card down to leave at
+  // least 8px gap below the previous one. Layout twice — once to measure
+  // heights, once to push.
+  rows.sort((a, b) => a.top - b.top);
+  let prevBottom = -8;
+  for (const r of rows) {
+    const finalTop = Math.max(r.top, prevBottom + 8);
+    r.card.style.top = `${finalTop}px`;
+    prevBottom = finalTop + r.card.offsetHeight;
+  }
+}
+
+// Reposition margin comments on resize (column widths shift, anchors move).
+let _marginResizeHandle = null;
+window.addEventListener('resize', () => {
+  if (_marginResizeHandle) cancelAnimationFrame(_marginResizeHandle);
+  _marginResizeHandle = requestAnimationFrame(() => {
+    _renderMarginComments(Object.values(_commentsCache));
+  });
+});
+
+function _focusComment(cid) {
+  if (!Number.isFinite(cid)) return;
+  const c = _commentsCache[cid];
+  if (!c) return;
+  const target = document.querySelector(`mark.cmt-highlight[data-cid="${cid}"]`)
+              || document.getElementById(`beat-${c.beat_index}`);
+  if (!target) return;
+
+  target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+  requestAnimationFrame(() => {
+    setTimeout(() => {
+      const rect = target.getBoundingClientRect();
+      _openExistingPopover([cid], rect);
+    }, 220);
   });
 }
 

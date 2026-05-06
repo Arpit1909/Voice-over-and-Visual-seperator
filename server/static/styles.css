@@ -1164,31 +1164,140 @@ body::before {
 .export-group .btn-ghost + .btn-ghost { border-left: 1px solid var(--border); }
 .export-group .btn-ghost:hover { background: var(--accent-soft); color: var(--accent); }
 
-/* Two-column viewer: script table on the left, sticky video player on the
-   right. Player rail is now noticeably bigger — clamp 480-720px. */
+/* Three-column viewer: script | margin comments | sticky player.
+   Player stays big (clamp 480-720). Margin column gets a fixed slice and
+   hides automatically on narrower viewports (handled below 1500px). */
 .viewer-layout {
   max-width: none;
   margin: 0;
   padding: clamp(18px, 1.8vw, 32px) clamp(20px, 2.4vw, 44px) 80px;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) clamp(480px, 36vw, 720px);
-  gap: clamp(20px, 1.8vw, 32px);
+  grid-template-columns:
+    minmax(0, 1fr)                 /* script */
+    clamp(260px, 18vw, 340px)      /* margin comments */
+    clamp(480px, 32vw, 680px);     /* player — stays big */
+  gap: clamp(16px, 1.4vw, 28px);
   align-items: start;
+}
+
+/* Below 1500 viewport: drop the margin column. Comments still appear
+   inline as highlights you can click to open the popover. */
+@media (max-width: 1500px) {
+  .viewer-layout {
+    grid-template-columns: minmax(0, 1fr) clamp(480px, 36vw, 720px);
+  }
+  .margin-comments-pane { display: none; }
 }
 .viewer-script-pane { min-width: 0; }
 
-/* Player rail — sticky on every screen size, just the player card. Smaller
-   than before since the right column is now a fixed-width slice. */
+/* Player rail — sticky on every screen size. Holds the video player at top
+   and the live comments list below; the list scrolls internally if it has
+   more entries than fit. */
 .viewer-player-pane {
   position: sticky;
   top: 18px;
   align-self: start;
   z-index: 10;
+  max-height: calc(100vh - 36px);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 .viewer-player-pane .player-card {
   width: 100%;
   display: flex;
   flex-direction: column;
+  flex: 0 0 auto;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   MARGIN COMMENTS — Google-Docs-style: each comment is absolutely
+   positioned next to the row it's anchored to in the script. */
+.margin-comments-pane {
+  position: relative;
+  align-self: stretch;
+  min-height: 100%;
+}
+.margin-comments-empty {
+  position: absolute;
+  top: 24px;
+  left: 0; right: 0;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-3);
+  font-style: italic;
+  line-height: 1.6;
+  padding: 12px 6px;
+}
+
+.margin-comment {
+  position: absolute;
+  left: 0; right: 0;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius-sm);
+  padding: 9px 12px 10px;
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+  transition: top .25s ease, background .12s, border-color .12s, box-shadow .15s;
+}
+.margin-comment::before {
+  /* Tether line connecting the comment back to its anchor in the script. */
+  content: '';
+  position: absolute;
+  left: -28px; top: 14px;
+  width: 24px; height: 2px;
+  background: var(--accent-line);
+  border-radius: 2px;
+}
+.margin-comment:hover {
+  background: var(--accent-soft);
+  border-color: var(--accent-line);
+  box-shadow: 0 4px 14px rgba(184,90,57,.10);
+}
+.margin-comment:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.margin-comment--resolved {
+  opacity: .55;
+  border-left-color: var(--success);
+}
+.margin-comment--resolved .margin-comment-body { text-decoration: line-through; }
+
+.margin-comment-quote {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 11px;
+  color: var(--vo-label);
+  margin-bottom: 4px;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-word;
+  font-variation-settings: 'opsz' 18;
+}
+.margin-comment-meta {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  font-size: 10px;
+  margin-bottom: 5px;
+}
+.margin-comment-author { font-weight: 500; color: var(--text); }
+.margin-comment-time { color: var(--text-3); font-family: var(--font-mono); }
+.margin-comment-body {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text);
+  word-break: break-word;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
