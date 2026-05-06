@@ -1165,10 +1165,11 @@ body::before {
 .export-group .btn-ghost:hover { background: var(--accent-soft); color: var(--accent); }
 
 /* Two-column viewer: script on the left, sticky player + contextual
-   comments on the right. --player-w is set by the drag-handle on the
-   left edge of the player rail (and persisted to localStorage). */
+   comments on the right. --player-w defaults to a generous slice so the
+   video reads at a useful size; the user can drag the handle on the
+   player's left edge to fine-tune (state persists in localStorage). */
 .viewer-layout {
-  --player-w: clamp(520px, 32vw, 760px);
+  --player-w: clamp(640px, 42vw, 980px);
   max-width: none;
   margin: 0;
   padding: clamp(16px, 1.5vw, 32px) clamp(18px, 2vw, 40px) 80px;
