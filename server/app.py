@@ -390,18 +390,22 @@ async def api_export(
     else:
         video_arg = video.name if video else ''
 
+    # YouTube id (when available) lets the exporters embed clickable
+    # ?t=<seconds> deep-links on every timestamp.
+    yt_id = a.get('yt_id') or ''
+
     if fmt == 'html':
         from modules.html_exporter import export_to_html
         path = export_to_html(result, str(out_dir), title, video_arg)
     elif fmt == 'pdf':
         from modules.pdf_exporter import export_to_pdf
-        path = export_to_pdf(result, str(out_dir), title)
+        path = export_to_pdf(result, str(out_dir), title, yt_id=yt_id)
     elif fmt == 'docx':
         from modules.exporter import export_to_docx
-        path = export_to_docx(result, str(out_dir), title)
+        path = export_to_docx(result, str(out_dir), title, yt_id=yt_id)
     else:
         from modules.exporter import export_to_txt
-        path = export_to_txt(result, str(out_dir), title)
+        path = export_to_txt(result, str(out_dir), title, yt_id=yt_id)
 
     return FileResponse(path, filename=Path(path).name)
 

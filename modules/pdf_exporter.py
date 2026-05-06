@@ -1,7 +1,7 @@
 import os
 import re
 
-from reportlab.lib.pagesizes import letter
+from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import inch
 from reportlab.lib.colors import HexColor
@@ -11,6 +11,35 @@ from reportlab.platypus import (
     KeepTogether,
 )
 from reportlab.platypus import LongTable as Table
+
+
+PAGE_SIZE = landscape(A4)  # 297 × 210 mm — standard A4 in landscape
+
+
+def _ts_to_seconds(ts: str) -> int:
+    """Parse 'HH:MM:SS' / 'MM:SS' / 'SS' to whole seconds. 0 on bad input."""
+    if not ts:
+        return 0
+    parts = [p for p in str(ts).strip().split(':') if p.strip()]
+    try:
+        nums = [int(float(p)) for p in parts]
+    except ValueError:
+        return 0
+    if len(nums) == 3:
+        h, m, s = nums
+    elif len(nums) == 2:
+        h, m, s = 0, nums[0], nums[1]
+    elif len(nums) == 1:
+        h, m, s = 0, 0, nums[0]
+    else:
+        return 0
+    return h * 3600 + m * 60 + s
+
+
+def _yt_link(yt_id: str, ts: str) -> str:
+    if not yt_id:
+        return ''
+    return f"https://youtu.be/{yt_id}?t={_ts_to_seconds(ts)}s"
 
 # ── Palette ────────────────────────────────────────────────────────────────────
 C_HEADER_BG   = HexColor('#F4B8B8')
@@ -68,13 +97,13 @@ def _styles():
 
 
 # ── Public ─────────────────────────────────────────────────────────────────────
-def export_to_pdf(data: dict, output_dir: str, title: str) -> str:
+def export_to_pdf(data: dict, output_dir: str, title: str, yt_id: str = '') -> str:
     safe = re.sub(r'[^\w\s\-]', '', title).strip().replace(' ', '_')[:60]
     out  = os.path.join(output_dir, f"{safe}_analysis.pdf")
 
     doc = SimpleDocTemplate(
         out,
-        pagesize=letter,
+        pagesize=PAGE_SIZE,                 # A4 landscape
         leftMargin=0.55 * inch,
         rightMargin=0.55 * inch,
         topMargin=0.65 * inch,
@@ -91,7 +120,7 @@ def export_to_pdf(data: dict, output_dir: str, title: str) -> str:
                                 st['sum_body']))
     story.append(Spacer(1, 10))
 
-    PAGE_W = letter[0] - 1.1 * inch
+    PAGE_W = PAGE_SIZE[0] - 1.1 * inch
     VO_W   = PAGE_W * 0.44
     VIS_W  = PAGE_W * 0.56
 
@@ -133,8 +162,14 @@ def export_to_pdf(data: dict, output_dir: str, title: str) -> str:
             vis_xml = ''
             if vis_ts_s or vis_ts_e:
                 ts_str = vis_ts_s + (f' – {vis_ts_e}' if vis_ts_e else '')
-                vis_xml += (f'<font size="8" color="#15803D"><b>({_x(ts_str)})</b></font>'
-                            f'<br/>')
+                vis_link = _yt_link(yt_id, vis_ts_s)
+                if vis_link:
+                    vis_xml += (f'<link href="{vis_link}">'
+                                f'<font size="8" color="#15803D"><b><u>({_x(ts_str)})</u></b></font>'
+                                f'</link><br/>')
+                else:
+                    vis_xml += (f'<font size="8" color="#15803D"><b>({_x(ts_str)})</b></font>'
+                                f'<br/>')
             if vis_desc:
                 vis_xml += _x(vis_desc)
             if vis_ost and vis_ost.upper() not in ('NONE', 'N/A', ''):
@@ -154,8 +189,14 @@ def export_to_pdf(data: dict, output_dir: str, title: str) -> str:
                     vo_xml = ''
                     if vo_ts_s or vo_ts_e:
                         ts_str = vo_ts_s + (f' – {vo_ts_e}' if vo_ts_e else '')
-                        vo_xml += (f'<font size="8" color="#B45309"><b>[{_x(ts_str)}]</b>'
-                                   f'</font><br/>')
+                        vo_link = _yt_link(yt_id, vo_ts_s)
+                        if vo_link:
+                            vo_xml += (f'<link href="{vo_link}">'
+                                       f'<font size="8" color="#B45309"><b><u>[{_x(ts_str)}]</u></b></font>'
+                                       f'</link><br/>')
+                        else:
+                            vo_xml += (f'<font size="8" color="#B45309"><b>[{_x(ts_str)}]</b>'
+                                       f'</font><br/>')
                     if vo_tone:
                         vo_xml += f'<font size="9" color="#7C3AED"><i>[{_x(vo_tone)}]</i></font><br/>'
                     vo_xml += _x(chunk) if chunk else ''
@@ -207,14 +248,18 @@ def export_to_pdf(data: dict, output_dir: str, title: str) -> str:
             story.append(Spacer(1, 10))
 
         if peaks:
-            peak_items = [
-                Paragraph(
-                    f'<font color="#92400E"><b>&#9654; {_x(pm.get("timestamp",""))}</b></font>'
-                    f'&nbsp;&nbsp;{_x(pm.get("description",""))}',
-                    st['peak'],
-                )
-                for pm in peaks
-            ]
+            peak_items = []
+            for pm in peaks:
+                ts_str = pm.get('timestamp', '')
+                desc   = pm.get('description', '')
+                link   = _yt_link(yt_id, ts_str)
+                if link:
+                    ts_xml = (f'<link href="{link}">'
+                              f'<font color="#92400E"><b>&#9654; <u>{_x(ts_str)}</u></b></font>'
+                              f'</link>')
+                else:
+                    ts_xml = f'<font color="#92400E"><b>&#9654; {_x(ts_str)}</b></font>'
+                peak_items.append(Paragraph(f'{ts_xml}&nbsp;&nbsp;{_x(desc)}', st['peak']))
             story += _card('Peak Moments', peak_items, PAGE_W, st)
             story.append(Spacer(1, 10))
 

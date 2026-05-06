@@ -2,10 +2,73 @@ import os
 import re
 
 from docx import Document
-from docx.shared import Pt, RGBColor, Inches
+from docx.shared import Pt, RGBColor, Mm
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
+
+
+def _ts_to_seconds(ts: str) -> int:
+    """Parse 'HH:MM:SS' or 'MM:SS' to whole seconds. Returns 0 on bad input."""
+    if not ts:
+        return 0
+    parts = [p for p in str(ts).strip().split(':') if p.strip()]
+    try:
+        nums = [int(float(p)) for p in parts]
+    except ValueError:
+        return 0
+    if len(nums) == 3:
+        h, m, s = nums
+    elif len(nums) == 2:
+        h, m, s = 0, nums[0], nums[1]
+    elif len(nums) == 1:
+        h, m, s = 0, 0, nums[0]
+    else:
+        return 0
+    return h * 3600 + m * 60 + s
+
+
+def _yt_link(yt_id: str, ts: str) -> str:
+    """Build a deep-link to a YouTube video at the given timestamp.
+    Returns '' if we don't have a video id."""
+    if not yt_id:
+        return ''
+    secs = _ts_to_seconds(ts)
+    return f"https://youtu.be/{yt_id}?t={secs}s"
+
+
+def _add_hyperlink(paragraph, url: str, text: str,
+                   color: str = '1A56B0', size: int = 8, bold: bool = True):
+    """Add a clickable hyperlink run inside a python-docx paragraph.
+
+    python-docx has no first-class API for this, so we build the underlying
+    XML directly: relate_to() registers the URL in the document's
+    relationship table, then we wrap a styled <w:r> in a <w:hyperlink>.
+    """
+    part = paragraph.part
+    r_id = part.relate_to(
+        url,
+        'http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink',
+        is_external=True,
+    )
+
+    hyperlink = OxmlElement('w:hyperlink')
+    hyperlink.set(qn('r:id'), r_id)
+
+    new_run = OxmlElement('w:r')
+    rPr = OxmlElement('w:rPr')
+
+    if bold:
+        b = OxmlElement('w:b'); rPr.append(b)
+    color_el = OxmlElement('w:color'); color_el.set(qn('w:val'), color); rPr.append(color_el)
+    u = OxmlElement('w:u'); u.set(qn('w:val'), 'single'); rPr.append(u)
+    sz = OxmlElement('w:sz'); sz.set(qn('w:val'), str(size * 2)); rPr.append(sz)
+
+    new_run.append(rPr)
+    t = OxmlElement('w:t'); t.text = text; new_run.append(t)
+    hyperlink.append(new_run)
+    paragraph._p.append(hyperlink)
+    return hyperlink
 
 
 # Colours
@@ -21,15 +84,15 @@ BG_VO      = 'FFF9E6'   # warm cream – VO rows
 BG_VISUAL  = 'E8F5E9'   # light green – Visual rows
 
 
-def export_to_docx(data: dict, output_dir: str, title: str) -> str:
+def export_to_docx(data: dict, output_dir: str, title: str, yt_id: str = '') -> str:
     doc = Document()
 
-    # Landscape-ish wide page
+    # A4 landscape (297 × 210 mm) — standard non-US paper size
     sec = doc.sections[0]
-    sec.page_width   = Inches(11)
-    sec.page_height  = Inches(8.5)
-    sec.left_margin  = sec.right_margin = Inches(0.6)
-    sec.top_margin   = sec.bottom_margin = Inches(0.6)
+    sec.page_width   = Mm(297)
+    sec.page_height  = Mm(210)
+    sec.left_margin  = sec.right_margin = Mm(15)
+    sec.top_margin   = sec.bottom_margin = Mm(15)
 
     # ── Title block ──────────────────────────────────────────────────────────
     p = doc.add_paragraph()
@@ -47,8 +110,9 @@ def export_to_docx(data: dict, output_dir: str, title: str) -> str:
     # ── Main two-column table ─────────────────────────────────────────────────
     tbl = doc.add_table(rows=1, cols=2)
     tbl.style = 'Table Grid'
-    _set_col_width(tbl, 0, Inches(4.7))
-    _set_col_width(tbl, 1, Inches(4.7))
+    # A4 landscape minus margins ≈ 267mm; split evenly between VO and Visuals.
+    _set_col_width(tbl, 0, Mm(133))
+    _set_col_width(tbl, 1, Mm(133))
 
     # Column header row
     hdr = tbl.rows[0].cells
@@ -75,9 +139,17 @@ def export_to_docx(data: dict, output_dir: str, title: str) -> str:
             _bg(vo_cell, BG_VO)
             vp = vo_cell.paragraphs[0]
 
-            # Timestamp
-            ts = f"[{vo.get('timestamp_start','')} – {vo.get('timestamp_end','')}]"
-            r = vp.add_run(ts + '\n'); r.font.size = Pt(8); r.font.color.rgb = C_GREY
+            # Timestamp — hyperlink when we have a YouTube id, plain otherwise.
+            vo_ts_s = vo.get('timestamp_start', '')
+            vo_ts_e = vo.get('timestamp_end', '')
+            ts_text = f"[{vo_ts_s} – {vo_ts_e}]"
+            link = _yt_link(yt_id, vo_ts_s)
+            if link:
+                _add_hyperlink(vp, link, ts_text, color='1A56B0', size=8, bold=True)
+                vp.add_run('\n')
+            else:
+                r = vp.add_run(ts_text + '\n')
+                r.font.size = Pt(8); r.font.color.rgb = C_GREY
 
             # Tone
             tone = vo.get('tone', '')
@@ -92,10 +164,17 @@ def export_to_docx(data: dict, output_dir: str, title: str) -> str:
             _bg(vis_cell, BG_VISUAL)
             vizp = vis_cell.paragraphs[0]
 
-            # Timestamp
-            vts = f"({viz.get('timestamp_start','')} – {viz.get('timestamp_end','')})"
-            r = vizp.add_run(vts + '\n'); r.bold = True
-            r.font.size = Pt(9); r.font.color.rgb = C_PURPLE
+            # Timestamp — hyperlink when we have a YouTube id.
+            vis_ts_s = viz.get('timestamp_start', '')
+            vis_ts_e = viz.get('timestamp_end', '')
+            vts = f"({vis_ts_s} – {vis_ts_e})"
+            link = _yt_link(yt_id, vis_ts_s)
+            if link:
+                _add_hyperlink(vizp, link, vts, color='15803D', size=9, bold=True)
+                vizp.add_run('\n')
+            else:
+                r = vizp.add_run(vts + '\n'); r.bold = True
+                r.font.size = Pt(9); r.font.color.rgb = C_PURPLE
 
             # Description
             desc = viz.get('description', '')
@@ -136,7 +215,13 @@ def export_to_docx(data: dict, output_dir: str, title: str) -> str:
         _labeled(doc, 'Peak Moments', '')
         for pm in peaks:
             p = doc.add_paragraph(style='List Bullet')
-            p.add_run(f"[{pm.get('timestamp','')}] ").bold = True
+            ts = pm.get('timestamp', '')
+            link = _yt_link(yt_id, ts)
+            if link:
+                _add_hyperlink(p, link, f"[{ts}]", color='1A56B0', size=10, bold=True)
+                p.add_run(' ')
+            else:
+                p.add_run(f"[{ts}] ").bold = True
             p.add_run(pm.get('description', ''))
 
     highlights = data.get('highlights', [])
@@ -152,13 +237,22 @@ def export_to_docx(data: dict, output_dir: str, title: str) -> str:
     return out
 
 
-def export_to_txt(data: dict, output_dir: str, title: str) -> str:
+def export_to_txt(data: dict, output_dir: str, title: str, yt_id: str = '') -> str:
+    # 80 chars wide — fits A4 portrait at 12pt monospace with 15mm margins.
     W = 80
     sep  = '=' * W
     thin = '─' * W
 
+    def ts(ts_str):
+        """Render a timestamp; append a clickable YT URL when we have an id."""
+        link = _yt_link(yt_id, ts_str)
+        return f"{ts_str}  →  {link}" if link else ts_str
+
     lines = [sep, f"VIDEO ANALYSIS: {data.get('title', title)}",
-             f"Duration: {data.get('total_duration','N/A')}", sep, '']
+             f"Duration: {data.get('total_duration','N/A')}"]
+    if yt_id:
+        lines.append(f"Source:   https://youtu.be/{yt_id}")
+    lines += [sep, '']
 
     for section in data.get('sections', []):
         lines += ['', thin, f"  SECTION: {section.get('title','').upper()}", thin, '']
@@ -167,13 +261,20 @@ def export_to_txt(data: dict, output_dir: str, title: str) -> str:
             vo  = beat.get('vo', {})
             viz = beat.get('visual') or beat.get('visual_after') or {}
 
+            vo_ts = vo.get('timestamp_start','')
+            vi_ts = viz.get('timestamp_start','')
+
             lines.append(f"  BEAT {i}")
-            lines.append(f"  ┌─ VO  [{vo.get('timestamp_start','')} – {vo.get('timestamp_end','')}]")
+            lines.append(f"  ┌─ VO  [{vo_ts} – {vo.get('timestamp_end','')}]")
+            if yt_id and vo_ts:
+                lines.append(f"  │   Watch  : {_yt_link(yt_id, vo_ts)}")
             if vo.get('tone'):
-                lines.append(f"  │   Tone : {vo['tone']}")
-            lines.append(f"  │   Text : {vo.get('text','')}")
+                lines.append(f"  │   Tone   : {vo['tone']}")
+            lines.append(f"  │   Text   : {vo.get('text','')}")
             lines.append( "  │")
-            lines.append(f"  └─ VISUAL  ({viz.get('timestamp_start','')} – {viz.get('timestamp_end','')})")
+            lines.append(f"  └─ VISUAL  ({vi_ts} – {viz.get('timestamp_end','')})")
+            if yt_id and vi_ts:
+                lines.append(f"      Watch       : {_yt_link(yt_id, vi_ts)}")
             lines.append(f"      Description : {viz.get('description','')}")
             if viz.get('on_screen_text') and viz['on_screen_text'].upper() != 'NONE':
                 lines.append(f"      On-screen   : {viz['on_screen_text']}")
@@ -188,7 +289,8 @@ def export_to_txt(data: dict, output_dir: str, title: str) -> str:
     if data.get('peak_moments'):
         lines += [thin, 'PEAK MOMENTS', thin]
         for pm in data['peak_moments']:
-            lines.append(f"  [{pm.get('timestamp','')}]  {pm.get('description','')}")
+            pts = pm.get('timestamp','')
+            lines.append(f"  [{ts(pts)}]  {pm.get('description','')}")
         lines.append('')
 
     if data.get('highlights'):
