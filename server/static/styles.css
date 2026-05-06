@@ -1230,12 +1230,18 @@ body::before {
   background: var(--border-strong);
   transition: background .15s, height .15s, width .15s;
 }
+/* The handle ONLY shows the active treatment while the user is actually
+   dragging (--active is added on pointerdown, removed on pointerup) or
+   hovering. Plain focus / click doesn't make it look stuck. */
 .player-resize-handle:hover::before,
 .player-resize-handle--active::before {
   background: var(--accent);
   height: 64px;
   width: 4px;
 }
+.player-resize-handle { outline: none; }
+.player-resize-handle:focus,
+.player-resize-handle:focus-visible { outline: none; }
 body.player-resizing,
 body.player-resizing * {
   cursor: ew-resize !important;

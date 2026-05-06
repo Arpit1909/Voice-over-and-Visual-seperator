@@ -964,34 +964,40 @@ function _setupPlayerResize() {
   if (handle._wired) return;
   handle._wired = true;
 
+  // Pointer events + pointer capture is the modern, reliable way to handle
+  // resize drags. The handle "owns" the pointer until pointerup, so the drag
+  // can't get stuck even if the cursor leaves the handle/window mid-motion.
   let dragging = false;
+  let activePointerId = null;
   let startX = 0;
   let startW = 0;
 
-  const beginDrag = (clientX) => {
+  const beginDrag = (e) => {
+    if (dragging) return;
     dragging = true;
-    startX = clientX;
+    activePointerId = e.pointerId;
+    startX = e.clientX;
     const cur = getComputedStyle(layout).getPropertyValue('--player-w').trim();
-    // If --player-w is still a clamp() value, measure the actual pane width
-    // for an honest starting point.
     startW = cur.endsWith('px') ? parseInt(cur, 10) : pane.getBoundingClientRect().width;
+    try { handle.setPointerCapture(e.pointerId); } catch { /* */ }
     document.body.classList.add('player-resizing');
     handle.classList.add('player-resize-handle--active');
   };
-  const moveDrag = (clientX) => {
-    if (!dragging) return;
-    // Dragging LEFT (negative delta in clientX from start) widens the
-    // player; dragging right shrinks it.
-    const delta = startX - clientX;
-    const next = Math.min(Math.max(360, startW + delta), 1400);
+  const moveDrag = (e) => {
+    if (!dragging || e.pointerId !== activePointerId) return;
+    const delta = startX - e.clientX;     // drag left → player widens
+    const next  = Math.min(Math.max(360, startW + delta), 1400);
     layout.style.setProperty('--player-w', next + 'px');
   };
-  const endDrag = () => {
+  const endDrag = (e) => {
     if (!dragging) return;
     dragging = false;
+    if (activePointerId !== null) {
+      try { handle.releasePointerCapture(activePointerId); } catch { /* */ }
+    }
+    activePointerId = null;
     document.body.classList.remove('player-resizing');
     handle.classList.remove('player-resize-handle--active');
-    // Persist the chosen width.
     const cur = layout.style.getPropertyValue('--player-w');
     const px  = parseInt(cur, 10);
     if (px) {
@@ -999,19 +1005,17 @@ function _setupPlayerResize() {
     }
   };
 
-  handle.addEventListener('mousedown', (e) => { beginDrag(e.clientX); e.preventDefault(); });
-  document.addEventListener('mousemove', (e) => moveDrag(e.clientX));
-  document.addEventListener('mouseup',   endDrag);
-  // Touch support for trackpad / tablet users.
-  handle.addEventListener('touchstart', (e) => {
-    if (e.touches[0]) beginDrag(e.touches[0].clientX);
-  }, { passive: true });
-  document.addEventListener('touchmove', (e) => {
-    if (e.touches[0]) moveDrag(e.touches[0].clientX);
-  }, { passive: true });
-  document.addEventListener('touchend', endDrag);
+  handle.addEventListener('pointerdown', (e) => {
+    // Ignore right-click and any non-primary buttons.
+    if (e.button !== 0) return;
+    e.preventDefault();
+    beginDrag(e);
+  });
+  handle.addEventListener('pointermove',   moveDrag);
+  handle.addEventListener('pointerup',     endDrag);
+  handle.addEventListener('pointercancel', endDrag);
 
-  // Double-click resets to the default.
+  // Double-click resets to the default size.
   handle.addEventListener('dblclick', () => {
     layout.style.removeProperty('--player-w');
     try { localStorage.removeItem('player-w'); } catch { /* */ }
