@@ -1169,7 +1169,7 @@ body::before {
    video reads at a useful size; the user can drag the handle on the
    player's left edge to fine-tune (state persists in localStorage). */
 .viewer-layout {
-  --player-w: clamp(640px, 42vw, 980px);
+  --player-w: clamp(720px, 50vw, 1180px);
   max-width: none;
   margin: 0;
   padding: clamp(16px, 1.5vw, 32px) clamp(18px, 2vw, 40px) 80px;
