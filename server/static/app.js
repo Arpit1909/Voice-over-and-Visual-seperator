@@ -1583,40 +1583,57 @@ function _renderPlayerComments() {
   });
 }
 
-// IntersectionObserver across all beat cells — picks the most-visible beat
-// as you scroll. Wired once per viewer render.
+// Scroll listener that picks the beat whose VO cell is closest to the
+// viewport center. Runs on every scroll frame (rAF-throttled) so the
+// comments panel updates fluidly whether the video is playing or paused.
+let _scrollHandler = null;
+
 function _wireBeatVisibilityTracking() {
+  // Tear down any previous binding from an earlier viewer.
   if (_scriptObserver) { _scriptObserver.disconnect(); _scriptObserver = null; }
+  if (_scrollHandler) {
+    window.removeEventListener('scroll', _scrollHandler);
+    _scrollHandler = null;
+  }
 
-  // .vo-col / .vis-col are the real boxes (their parent .beat is display:contents).
-  const cells = Array.from(document.querySelectorAll('.beat .vo-col, .beat .vis-col'));
-  if (!cells.length) return;
+  const updateFocusedBeat = () => {
+    // One representative box per beat — vo-col is always present (even
+    // empty beats render the "— no voice-over —" placeholder there).
+    const cells = document.querySelectorAll('.beat .vo-col');
+    if (!cells.length) return;
 
-  const visibility = new Map(); // beatIdx -> intersectionRatio (max across cells)
+    const viewportH = window.innerHeight || document.documentElement.clientHeight;
+    const centerY = viewportH / 2;
+    let bestIdx = -1;
+    let bestDist = Infinity;
 
-  _scriptObserver = new IntersectionObserver((entries) => {
-    for (const entry of entries) {
-      const beatEl = entry.target.closest('.beat');
-      if (!beatEl) continue;
-      const idx = parseInt((beatEl.id || '').replace('beat-', ''), 10);
-      if (Number.isNaN(idx)) continue;
-      const cur = visibility.get(idx) || 0;
-      visibility.set(idx, Math.max(cur, entry.isIntersecting ? entry.intersectionRatio : 0));
-    }
-    // Pick the beat with the highest visible ratio. Ignore tiny slivers.
-    let bestIdx = -1, bestRatio = 0.05;
-    for (const [idx, ratio] of visibility) {
-      if (ratio > bestRatio) { bestRatio = ratio; bestIdx = idx; }
-    }
-    if (bestIdx >= 0) _setFocusedBeat(bestIdx);
-  }, {
-    // Only consider beats that overlap the middle 60% of the viewport so the
-    // "current beat" matches what the user is actually reading.
-    rootMargin: '-20% 0% -20% 0%',
-    threshold: [0, 0.25, 0.5, 0.75, 1],
-  });
+    cells.forEach(cell => {
+      const rect = cell.getBoundingClientRect();
+      // Skip cells that aren't intersecting the viewport at all.
+      if (rect.bottom < 0 || rect.top > viewportH) return;
+      const cellCenter = (rect.top + rect.bottom) / 2;
+      const dist = Math.abs(cellCenter - centerY);
+      if (dist < bestDist) {
+        bestDist = dist;
+        const beatEl = cell.closest('.beat');
+        const idx = parseInt((beatEl?.id || '').replace('beat-', ''), 10);
+        if (!Number.isNaN(idx)) bestIdx = idx;
+      }
+    });
 
-  cells.forEach(c => _scriptObserver.observe(c));
+    if (bestIdx >= 0) _setIoFocusedBeat(bestIdx);
+  };
+
+  // rAF-throttle the scroll callback so we never run the search more than
+  // once per paint frame, even on a fast trackpad fling.
+  let rafId = null;
+  _scrollHandler = () => {
+    if (rafId) return;
+    rafId = requestAnimationFrame(() => { rafId = null; updateFocusedBeat(); });
+  };
+  window.addEventListener('scroll', _scrollHandler, { passive: true });
+  // Seed once so the panel has a focused beat before the user scrolls.
+  updateFocusedBeat();
 }
 
 function _focusComment(cid) {
