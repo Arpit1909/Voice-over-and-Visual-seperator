@@ -1647,7 +1647,9 @@ function makeTimeTracker(beats) {
       const el = $(`#beat-${i}`);
       el?.classList.add('beat--active');
       $('#cur-beat').textContent = `#${i + 1}`;
-      if (autoscroll?.checked && i !== lastScrollIdx) {
+      // Auto-scroll is always on — the toggle is hidden in the UI but the
+      // behavior stays so the active beat keeps centering as the video plays.
+      if (i !== lastScrollIdx) {
         el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
         lastScrollIdx = i;
       }
