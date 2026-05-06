@@ -596,6 +596,17 @@ body::before {
   margin: 0 auto;
 }
 
+/* The viewer (results page) needs the full page width — VO+Visual cards
+   and the player rail manage their own padding/sizing internally. Without
+   this override, the .view rule above centers the whole results UI inside
+   a 1320px max-width column, leaving an empty void on the left whenever
+   the sidebar is collapsed. */
+.view.view-viewer {
+  max-width: none;
+  padding: 0;
+  margin: 0;
+}
+
 .view-header { margin-bottom: 28px; max-width: 720px; }
 .view-header .eyebrow {
   display: inline-block;
