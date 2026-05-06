@@ -863,6 +863,7 @@ function _renderViewer(id, payload, comments, token) {
   }
   _indexComments(comments?.items);
   _currentAnalysisId = id;
+  _startCommentsPoll(id);
 
   // Flatten beats with global index
   const beats = [];
@@ -1276,6 +1277,63 @@ async function _refetchAndRerender() {
   const id = h.slice('#/view/'.length);
   _cacheInvalidate(id);
   loadViewer(id);
+}
+
+// ── Comments live-refresh ──────────────────────────────────────────────────
+// Polls the comments endpoint every few seconds while the viewer is open so
+// teammates' adds/edits/deletes show up without a manual reload. Skipped
+// while a popover is open to avoid wiping the user's in-progress typing.
+let _commentsPollHandle = null;
+let _commentsPollSig    = '';
+
+function _startCommentsPoll(id) {
+  _stopCommentsPoll();
+  // Seed the signature with what we just rendered so the first poll doesn't
+  // false-positive into an immediate re-render.
+  _commentsPollSig = _commentsSignature(Object.values(_commentsCache));
+
+  _commentsPollHandle = setInterval(async () => {
+    // Aborted: navigated away or popover open (don't yank the form mid-type).
+    if (id !== _currentAnalysisId) return _stopCommentsPoll();
+    if (_popover || _floatingAdd) return;
+    if (document.hidden) return; // tab in background — skip the request
+
+    try {
+      const fresh = await api(`/api/results/${id}/comments`);
+      const sig   = _commentsSignature(fresh.items || []);
+      if (sig === _commentsPollSig) return; // no change
+      _commentsPollSig = sig;
+
+      const cached = _cacheGet(id);
+      if (cached) {
+        cached.comments = fresh;
+        _cacheSet(id, cached);
+      }
+      // Re-render in place. _renderViewer guards on _viewerLoadToken so a
+      // concurrent navigation away will short-circuit before touching DOM.
+      const cur = _cacheGet(id);
+      if (cur) _renderViewer(id, cur.payload, fresh, _viewerLoadToken);
+    } catch {
+      // Network blip — keep polling, don't toast (would spam).
+    }
+  }, 6000);
+}
+
+function _stopCommentsPoll() {
+  if (_commentsPollHandle) {
+    clearInterval(_commentsPollHandle);
+    _commentsPollHandle = null;
+  }
+}
+
+// Stable hash of the comment list (id + body + resolved + edited timestamp if
+// present). Two snapshots produce the same string only if nothing changed.
+function _commentsSignature(items) {
+  if (!items || !items.length) return '';
+  return items
+    .map(c => `${c.id}:${c.body?.length || 0}:${c.resolved ? 1 : 0}:${c.created_at || 0}`)
+    .sort()
+    .join('|');
 }
 
 function setupCommentSelection() {
