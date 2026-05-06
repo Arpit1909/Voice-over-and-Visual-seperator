@@ -1447,27 +1447,11 @@ body::before {
 .beat {
   display: contents;
 }
-/* Beat-head used to carry Beat# / type / timestamp pills above each row.
-   The PDF doesn't show those in-table, so we span them across both columns
-   as a slim sub-banner above the row. */
-.beat-head {
-  grid-column: 1 / -1;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  padding: 8px 18px;
-  margin: 0;
-  background: var(--bg);
-  border-top: 1px solid var(--line);
-  border-bottom: 1px solid var(--line);
-  font-size: 11px;
-}
-.beat-head:first-of-type { border-top: none; }
-.beat--active .beat-head {
-  background: var(--accent-soft);
-  border-color: var(--accent-line);
-}
+/* The Beat# / type / timestamp header strip is intentionally hidden — the
+   timestamp already appears at the top of each cell, the column header at
+   the top of the table tells you which side is VO vs Visuals, and the now-
+   playing state lights up the cells themselves. The strip just added noise. */
+.beat-head { display: none; }
 
 .beat-head {
   display: flex;
