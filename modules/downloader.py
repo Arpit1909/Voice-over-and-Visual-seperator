@@ -39,26 +39,26 @@ def extract_url(text: str) -> str:
 
 SUPPORTED_EXTENSIONS = {'.mp4', '.avi', '.mov', '.mkv', '.webm', '.flv', '.wmv', '.mpg', '.mpeg', '.3gp', '.m4v'}
 
-# Format attempts in order — each is tried until one succeeds
-_YT_FORMAT_ATTEMPTS = [
-    'best[ext=mp4]',
-    'bestvideo[vcodec^=avc1][ext=mp4]+bestaudio[ext=m4a]',
-    'bestvideo[vcodec^=avc]+bestaudio',
-    'best',
+# Flags shared by every yt-dlp call. Mirrors the pattern that works on bot-flagged
+# datacenter IPs without bgutil/PO-Token plumbing:
+#   --js-runtimes node  → lets yt-dlp solve the YouTube `n` JS challenge
+#   -4                  → force IPv4 (datacenter v6 ranges are flagged harder)
+#   --no-check-certificate → tolerate intermediate proxies/MITM in some networks
+# We deliberately do NOT pin a `youtube:player_client=...` — yt-dlp picks the
+# right client for the cookies in use, and forcing one usually makes things
+# worse on flagged IPs.
+_YT_BASE_ARGS = [
+    '--no-playlist',
+    '--no-check-certificate',
+    '--js-runtimes', 'node',
+    '-4',
 ]
 
-# Player clients tried in order. Ordered so the ones that DON'T require a PO
-# Token come first — cookies + one of these is enough on a flagged datacenter
-# IP. `web` is last because it now hard-requires a PO Token in 2026.
-_YT_PLAYER_CLIENTS = [
-    'mweb',          # mobile web — most reliable with cookies in 2026
-    'tv',            # TV interface — no PO token, no JS challenge
-    'tv_embedded',   # TV embed — fallback
-    'web_safari',    # Safari client — sometimes unblocked
-    'web_embedded',  # web embed — fallback
-    'android',       # restricted but occasionally works
-    'ios',           # heavily restricted in 2026
-    'web',           # last resort — needs PO token via bgutil
+# Format selector: progressive mp4 first, then split video+audio merged to mp4,
+# then any best. -S biases ranking toward avc1/aac for downstream ffmpeg compat.
+_YT_FORMAT_ARGS = [
+    '-f', 'bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/best',
+    '-S', 'ext:mp4:m4a,res,codec:avc1:acodec:aac',
 ]
 
 def _ytdlp_cmd() -> list:
@@ -153,83 +153,57 @@ def _download_youtube(url: str) -> tuple[str, str, dict]:
 
     print(f"Downloading: {title}")
 
-    ffmpeg     = _ffmpeg_dir()
-    last_error = None
-
-    cookies = _cookies_args()
-    for client in _YT_PLAYER_CLIENTS:
-        for fmt in _YT_FORMAT_ATTEMPTS:
-            try:
-                cmd = _ytdlp_cmd() + [
-                    '--format', fmt,
-                    '--merge-output-format', 'mp4',
-                    '--output', output_tpl,
-                    '--no-playlist',
-                    '--no-warnings',
-                    '--extractor-args', f'youtube:player_client={client}',
-                ] + cookies
-                if ffmpeg:
-                    cmd += ['--ffmpeg-location', ffmpeg]
-                cmd.append(url)
-                subprocess.run(cmd, check=True, env=env)
-
-                files = [f for f in os.listdir(output_dir)
-                         if os.path.isfile(os.path.join(output_dir, f))]
-                if files:
-                    path = os.path.join(output_dir, files[0])
-                    if not path.endswith('.mp4'):
-                        path = _convert_to_mp4(path, env)
-                    return path, title, meta
-
-            except subprocess.CalledProcessError as e:
-                last_error = e
-                print(f"  [{client}] Format '{fmt}' failed, trying next...")
-                for f in os.listdir(output_dir):
-                    try:
-                        os.remove(os.path.join(output_dir, f))
-                    except OSError:
-                        pass
-
-    raise RuntimeError(
-        f"All download attempts failed for this video.\n"
-        f"Last error: {last_error}\n"
-        f"Make sure ffmpeg is installed:\n"
-        f"  macOS:  brew install ffmpeg\n"
-        f"  Linux:  sudo apt install ffmpeg\n"
-        f"  Windows: winget install Gyan.FFmpeg"
+    ffmpeg = _ffmpeg_dir()
+    cmd = (
+        _ytdlp_cmd()
+        + _YT_BASE_ARGS
+        + _YT_FORMAT_ARGS
+        + ['--merge-output-format', 'mp4', '-o', output_tpl]
+        + _cookies_args()
     )
+    if ffmpeg:
+        cmd += ['--ffmpeg-location', ffmpeg]
+    cmd.append(url)
+
+    try:
+        subprocess.run(cmd, check=True, env=env, capture_output=True, text=True)
+    except subprocess.CalledProcessError as e:
+        raise RuntimeError(
+            f"yt-dlp download failed.\n"
+            f"URL: {url}\n"
+            f"yt-dlp said: {(e.stderr or '').strip()[:1000]}\n"
+            f"Make sure ffmpeg + node are installed and cookies.txt is fresh."
+        ) from e
+
+    files = [f for f in os.listdir(output_dir)
+             if os.path.isfile(os.path.join(output_dir, f))]
+    if not files:
+        raise RuntimeError("yt-dlp finished but no output file was produced.")
+
+    path = os.path.join(output_dir, files[0])
+    if not path.endswith('.mp4'):
+        path = _convert_to_mp4(path, env)
+    return path, title, meta
 
 
 def _yt_dump_json(url: str, env: dict) -> dict:
-    """Fetch video metadata, trying each player client until one works."""
-    per_client_errors: list[str] = []
+    """Fetch video metadata. Single call with the same flag set as the download."""
     cookies = _cookies_args()
-    for client in _YT_PLAYER_CLIENTS:
-        try:
-            result = subprocess.run(
-                _ytdlp_cmd() + [
-                    '--dump-json', '--no-playlist',
-                    '--extractor-args', f'youtube:player_client={client}',
-                ] + cookies + [url],
-                capture_output=True, text=True, check=True, env=env,
-            )
-            return json.loads(result.stdout)
-        except subprocess.CalledProcessError as e:
-            # Capture per-client stderr — when ALL clients fail you need to see
-            # which one died how, not just the last one. Keep only the final
-            # ERROR line per client so the message stays readable.
-            err = (e.stderr or '').strip().splitlines()
-            tail = next((ln for ln in reversed(err) if 'ERROR' in ln), err[-1] if err else '(empty)')
-            per_client_errors.append(f"  [{client}] {tail[:300]}")
-            continue
-    joined = '\n'.join(per_client_errors) or '(no stderr captured)'
-    raise RuntimeError(
-        f"Could not fetch video info from YouTube.\n"
-        f"URL: {url}\n"
-        f"All player clients failed:\n{joined}\n"
-        f"Cookies in use: {'yes' if cookies else 'NO — set YT_DLP_COOKIES or drop cookies.txt at project root'}\n"
-        f"If this persists, update yt-dlp:  pip install -U yt-dlp"
-    )
+    try:
+        result = subprocess.run(
+            _ytdlp_cmd() + ['--dump-json'] + _YT_BASE_ARGS + cookies + [url],
+            capture_output=True, text=True, check=True, env=env,
+        )
+        return json.loads(result.stdout)
+    except subprocess.CalledProcessError as e:
+        stderr = (e.stderr or '').strip()
+        raise RuntimeError(
+            f"Could not fetch video info from YouTube.\n"
+            f"URL: {url}\n"
+            f"yt-dlp said: {stderr[:1000]}\n"
+            f"Cookies in use: {'yes' if cookies else 'NO — set YT_DLP_COOKIES or drop cookies.txt at project root'}\n"
+            f"If this persists, update yt-dlp:  pip install -U yt-dlp"
+        )
 
 
 def _validate_local(path: str) -> tuple[str, str]:
