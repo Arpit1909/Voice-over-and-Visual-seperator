@@ -1515,7 +1515,7 @@ function _renderPlayerComments() {
 
   const idx = _focusedBeatIdx;
   if (idx < 0) {
-    if (titleEl) titleEl.textContent = 'No beat selected';
+    if (titleEl) titleEl.textContent = 'No comments';
     if (countEl) countEl.textContent = '0';
     listEl.innerHTML = `<p class="player-comments-empty">Scroll through the script — comments on the visible beat appear here.</p>`;
     return;
@@ -1525,7 +1525,9 @@ function _renderPlayerComments() {
     .filter(c => c.beat_index === idx);
   const live = beatComments.filter(c => !c.resolved);
 
-  if (titleEl) titleEl.textContent = `Beat ${idx + 1}`;
+  // Header shows the comment count (replaces the old "Beat N" label).
+  const noun = live.length === 1 ? 'comment' : 'comments';
+  if (titleEl) titleEl.textContent = `${live.length} ${noun}`;
   if (countEl) countEl.textContent = String(live.length);
 
   if (!beatComments.length) {
