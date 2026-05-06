@@ -51,8 +51,9 @@ async def healthz():
 @app.get('/favicon.ico')
 async def favicon():
     """Browsers auto-request /favicon.ico without reading the HTML. Hand back
-    the static jpeg so we don't pollute logs with 404s."""
-    return FileResponse(str(STATIC_DIR / 'favicon.jpg'), media_type='image/jpeg')
+    the AVIF logo so we don't pollute logs with 404s; modern browsers accept
+    AVIF served at the .ico path."""
+    return FileResponse(str(STATIC_DIR / 'favicon.avif'), media_type='image/avif')
 
 
 _NOCACHE = {'Cache-Control': 'no-store, must-revalidate', 'Pragma': 'no-cache'}
