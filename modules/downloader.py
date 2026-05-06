@@ -60,6 +60,26 @@ def _ytdlp_cmd() -> list:
     """Use the same Python interpreter's yt_dlp module — avoids PATH issues with venvs."""
     return [sys.executable, '-m', 'yt_dlp']
 
+
+def _cookies_args() -> list:
+    """Return ['--cookies', path] when a YouTube cookies file is configured.
+
+    Datacenter IPs are bot-flagged; cookies prove the request is from a logged-in
+    user. Resolution order:
+      1. $YT_DLP_COOKIES env var (explicit path).
+      2. cookies.txt next to the project root (auto-detected).
+    Cookies typically expire every 30–60 days — re-export when downloads start
+    failing again with "Sign in to confirm you're not a bot".
+    """
+    path = os.getenv('YT_DLP_COOKIES', '').strip()
+    if not path:
+        default = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'cookies.txt')
+        if os.path.isfile(default):
+            path = default
+    if path and os.path.isfile(path):
+        return ['--cookies', path]
+    return []
+
 # Common ffmpeg install locations on Windows
 _FFMPEG_PATHS = [
     r'C:\Program Files\ffmpeg\bin',
@@ -131,6 +151,7 @@ def _download_youtube(url: str) -> tuple[str, str, dict]:
     ffmpeg     = _ffmpeg_dir()
     last_error = None
 
+    cookies = _cookies_args()
     for client in _YT_PLAYER_CLIENTS:
         for fmt in _YT_FORMAT_ATTEMPTS:
             try:
@@ -141,7 +162,7 @@ def _download_youtube(url: str) -> tuple[str, str, dict]:
                     '--no-playlist',
                     '--no-warnings',
                     '--extractor-args', f'youtube:player_client={client}',
-                ]
+                ] + cookies
                 if ffmpeg:
                     cmd += ['--ffmpeg-location', ffmpeg]
                 cmd.append(url)
@@ -177,14 +198,14 @@ def _download_youtube(url: str) -> tuple[str, str, dict]:
 def _yt_dump_json(url: str, env: dict) -> dict:
     """Fetch video metadata, trying each player client until one works."""
     last_stderr = ''
+    cookies = _cookies_args()
     for client in _YT_PLAYER_CLIENTS:
         try:
             result = subprocess.run(
                 _ytdlp_cmd() + [
                     '--dump-json', '--no-playlist',
                     '--extractor-args', f'youtube:player_client={client}',
-                    url,
-                ],
+                ] + cookies + [url],
                 capture_output=True, text=True, check=True, env=env,
             )
             return json.loads(result.stdout)
