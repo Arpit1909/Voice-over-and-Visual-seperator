@@ -1276,7 +1276,7 @@ async function _refetchAndRerender() {
   if (!h.startsWith('#/view/')) return;
   const id = h.slice('#/view/'.length);
   _cacheInvalidate(id);
-  loadViewer(id);
+  openViewer(id);
 }
 
 // ── Comments live-refresh ──────────────────────────────────────────────────
