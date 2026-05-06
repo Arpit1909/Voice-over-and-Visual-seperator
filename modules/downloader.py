@@ -1,10 +1,41 @@
 import os
 import json
+import re
 import subprocess
 import sys
 import tempfile
 
 MAX_DURATION_SECONDS = 3600  # 1 hour
+
+# Matches anything that looks like a URL: full http(s), or bare youtu.be/youtube.com/www.
+# `\S+` stops at whitespace, so newlines/spaces in pasted blobs cleanly split title from URL.
+_URL_RE = re.compile(
+    r'(?:https?://|www\.|youtu\.be/|youtube\.com/|m\.youtube\.com/)\S+',
+    re.IGNORECASE,
+)
+
+
+def extract_url(text: str) -> str:
+    """Pull the first URL out of a possibly-messy paste.
+
+    YouTube's mobile share button copies a blob like:
+        Kids Lead Police To Mom's Murder Secret\n\nyoutu.be/kAuPzEUT2i4?si=...
+    Without this, the entire blob (title + newlines + URL) reaches yt-dlp and
+    fails parsing. Returns '' when no URL is found so callers can error cleanly.
+    """
+    if not text:
+        return ''
+    text = text.strip()
+    # Fast path: clean single-token URL.
+    if text.startswith(('http://', 'https://')) and not any(c in text for c in ' \n\r\t'):
+        return text
+    m = _URL_RE.search(text)
+    if not m:
+        return ''
+    url = m.group(0).rstrip(').,;:!?"\'>]')
+    if not url.lower().startswith(('http://', 'https://')):
+        url = 'https://' + url
+    return url
 
 SUPPORTED_EXTENSIONS = {'.mp4', '.avi', '.mov', '.mkv', '.webm', '.flv', '.wmv', '.mpg', '.mpeg', '.3gp', '.m4v'}
 
@@ -44,8 +75,9 @@ def get_video(input_path: str) -> tuple[str, str, dict]:
       - {'source': 'youtube', 'url': ..., 'video_id': ..., 'playable_in_embed': bool}
       - {'source': 'local'}
     """
-    if input_path.startswith(('http://', 'https://', 'www.', 'youtu')):
-        return _download_youtube(input_path)
+    candidate = extract_url(input_path)
+    if candidate:
+        return _download_youtube(candidate)
     path, title = _validate_local(input_path)
     return path, title, {'source': 'local'}
 
@@ -144,7 +176,7 @@ def _download_youtube(url: str) -> tuple[str, str, dict]:
 
 def _yt_dump_json(url: str, env: dict) -> dict:
     """Fetch video metadata, trying each player client until one works."""
-    last_error = None
+    last_stderr = ''
     for client in _YT_PLAYER_CLIENTS:
         try:
             result = subprocess.run(
@@ -157,9 +189,16 @@ def _yt_dump_json(url: str, env: dict) -> dict:
             )
             return json.loads(result.stdout)
         except subprocess.CalledProcessError as e:
-            last_error = e
+            # Surface yt-dlp's actual stderr — the wrapper exit code alone hides
+            # the real reason (bad URL, bot-check, geo-block, stale yt-dlp, …).
+            last_stderr = (e.stderr or '').strip()
             continue
-    raise RuntimeError(f"Could not fetch video info from YouTube.\nLast error: {last_error}")
+    raise RuntimeError(
+        f"Could not fetch video info from YouTube.\n"
+        f"URL: {url}\n"
+        f"yt-dlp said: {last_stderr or '(no stderr captured)'}\n"
+        f"If this persists, update yt-dlp:  pip install -U yt-dlp"
+    )
 
 
 def _validate_local(path: str) -> tuple[str, str]:

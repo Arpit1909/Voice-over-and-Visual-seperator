@@ -185,9 +185,12 @@ async def api_analyze(
                  "Delete old analyses first.")
 
     if url and url.strip():
-        url = url.strip()
-        if not (url.startswith(('http://', 'https://')) or 'youtu' in url[:30]):
-            raise HTTPException(400, "URL must start with http:// or https://")
+        # Pull the URL out of share-blob pastes ("Title\n\nyoutu.be/...") so
+        # yt-dlp doesn't get the title baked into the URL argument.
+        from modules.downloader import extract_url
+        url = extract_url(url)
+        if not url:
+            raise HTTPException(400, "Couldn't find a YouTube/HTTP URL in your input.")
         analysis_id = storage.create_analysis(source='youtube', source_url=url)
     elif file and file.filename:
         ext = Path(file.filename).suffix.lower()
