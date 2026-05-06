@@ -47,13 +47,18 @@ _YT_FORMAT_ATTEMPTS = [
     'best',
 ]
 
-# Player clients tried in order to bypass YouTube bot-detection (403 errors)
+# Player clients tried in order. Ordered so the ones that DON'T require a PO
+# Token come first — cookies + one of these is enough on a flagged datacenter
+# IP. `web` is last because it now hard-requires a PO Token in 2026.
 _YT_PLAYER_CLIENTS = [
-    'tv_embedded',
-    'web_embedded',
-    'ios',
-    'android',
-    'web',
+    'mweb',          # mobile web — most reliable with cookies in 2026
+    'tv',            # TV interface — no PO token, no JS challenge
+    'tv_embedded',   # TV embed — fallback
+    'web_safari',    # Safari client — sometimes unblocked
+    'web_embedded',  # web embed — fallback
+    'android',       # restricted but occasionally works
+    'ios',           # heavily restricted in 2026
+    'web',           # last resort — needs PO token via bgutil
 ]
 
 def _ytdlp_cmd() -> list:
@@ -197,7 +202,7 @@ def _download_youtube(url: str) -> tuple[str, str, dict]:
 
 def _yt_dump_json(url: str, env: dict) -> dict:
     """Fetch video metadata, trying each player client until one works."""
-    last_stderr = ''
+    per_client_errors: list[str] = []
     cookies = _cookies_args()
     for client in _YT_PLAYER_CLIENTS:
         try:
@@ -210,14 +215,19 @@ def _yt_dump_json(url: str, env: dict) -> dict:
             )
             return json.loads(result.stdout)
         except subprocess.CalledProcessError as e:
-            # Surface yt-dlp's actual stderr — the wrapper exit code alone hides
-            # the real reason (bad URL, bot-check, geo-block, stale yt-dlp, …).
-            last_stderr = (e.stderr or '').strip()
+            # Capture per-client stderr — when ALL clients fail you need to see
+            # which one died how, not just the last one. Keep only the final
+            # ERROR line per client so the message stays readable.
+            err = (e.stderr or '').strip().splitlines()
+            tail = next((ln for ln in reversed(err) if 'ERROR' in ln), err[-1] if err else '(empty)')
+            per_client_errors.append(f"  [{client}] {tail[:300]}")
             continue
+    joined = '\n'.join(per_client_errors) or '(no stderr captured)'
     raise RuntimeError(
         f"Could not fetch video info from YouTube.\n"
         f"URL: {url}\n"
-        f"yt-dlp said: {last_stderr or '(no stderr captured)'}\n"
+        f"All player clients failed:\n{joined}\n"
+        f"Cookies in use: {'yes' if cookies else 'NO — set YT_DLP_COOKIES or drop cookies.txt at project root'}\n"
         f"If this persists, update yt-dlp:  pip install -U yt-dlp"
     )
 
