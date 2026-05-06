@@ -674,15 +674,25 @@ async function openJobView(id) {
     if (!newLines.length) return;
     lastLogSeq = payload.seq || lastLogSeq;
 
+    // Filter out noise — show only clip-level progress so users see chunk
+    // status without rate-limit retries / model errors / tracebacks.
+    const visibleLines = newLines.filter(({ line }) => isHighLevelLogLine(line));
+
     const body = $('#log-body');
     const empty = body.querySelector('.log-empty');
-    if (empty) empty.remove();
+    if (empty && visibleLines.length) empty.remove();
+
+    if (!visibleLines.length) {
+      // We saw new lines but nothing user-facing — just bump the meta count.
+      $('#log-meta').textContent = `clip progress · ${lastLogSeq} line${lastLogSeq === 1 ? '' : 's'} processed`;
+      return;
+    }
 
     const followEl = $('#log-autoscroll');
     const stickyBottom = followEl.checked
       || (body.scrollHeight - body.scrollTop - body.clientHeight < 60);
 
-    const html = newLines.map(({ seq, ts, line }) => {
+    const html = visibleLines.map(({ seq, ts, line }) => {
       const cls = classifyLogLine(line);
       const t = new Date(ts * 1000);
       const stamp = `${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}:${String(t.getSeconds()).padStart(2, '0')}`;
@@ -702,6 +712,22 @@ async function openJobView(id) {
 
   await poll();
   _jobPoll = setInterval(poll, 1500);
+}
+
+// Only show "milestone" lines to the user — the chunk plan up front, each
+// clip starting / finishing, and the final save. Everything else (model
+// retries, rate-limit waits, traceback noise) stays in the server-side
+// log file but never reaches the UI.
+function isHighLevelLogLine(line) {
+  const s = (line || '').trim();
+  if (!s) return false;
+  if (/min video → \d+ clips/i.test(s)) return true;       // chunk plan header
+  if (/^Clip\s+\d+\/\d+:/i.test(s)) return true;           // "Clip 3/7: 00:16:00 → 00:24:00"
+  if (/^===\s*Clip\s+\d+/i.test(s)) return true;           // some lines have ===
+  if (/^Gap\s+\d+\/\d+/i.test(s)) return true;             // sub-coverage clips
+  if (/filled with \d+ beats/i.test(s)) return true;       // clip done
+  if (/Done\s*[—–-]\s*\d+ sections?/i.test(s)) return true; // final summary
+  return false;
 }
 
 function classifyLogLine(line) {
@@ -1848,10 +1874,13 @@ function makeTimeTracker(beats) {
       const el = $(`#beat-${i}`);
       el?.classList.add('beat--active');
       $('#cur-beat').textContent = `#${i + 1}`;
-      // Auto-scroll is always on — the toggle is hidden in the UI but the
-      // behavior stays so the active beat keeps centering as the video plays.
+      // Auto-scroll to the active beat. The .beat element itself uses
+      // display:contents (so its kids land in the table grid), which
+      // means it has no box for scrollIntoView to target. Scroll to its
+      // first real cell (vo-col / vis-col) instead.
       if (i !== lastScrollIdx) {
-        el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        const scrollTarget = el?.querySelector('.vo-col, .vis-col') || el;
+        scrollTarget?.scrollIntoView({ behavior: 'smooth', block: 'center' });
         lastScrollIdx = i;
       }
     } else {
