@@ -1153,15 +1153,15 @@ body::before {
 .export-group .btn-ghost + .btn-ghost { border-left: 1px solid var(--border); }
 .export-group .btn-ghost:hover { background: var(--accent-soft); color: var(--accent); }
 
-/* Two-column viewer with EXPLICIT proportions so both columns get sensible
-   widths regardless of viewport. ~58% goes to the script (so VO + Visual
-   each get a comfortable 280–700 px of width), ~42% to the player rail. */
+/* Two-column viewer with the PLAYER as the dominant column so it visually
+   fills the right half of the page. Script column carries VO/Visual cards
+   stacked (or side-by-side at very wide viewports). */
 .viewer-layout {
   max-width: none;
   margin: 0;
   padding: clamp(18px, 1.8vw, 32px) clamp(20px, 2.4vw, 44px) 80px;
   display: grid;
-  grid-template-columns: minmax(0, 1.4fr) minmax(420px, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(560px, 1.4fr);
   gap: clamp(18px, 1.8vw, 32px);
   align-items: start;
 }
