@@ -1746,10 +1746,31 @@ async function boot() {
   const SIDEBAR_KEY = 'sidebar-collapsed';
   const shell = document.querySelector('.app-shell');
   const toggleBtn = $('#sidebar-toggle');
+
+  // Lucide-style panel icons: rectangle (the page), a vertical rail (the
+  // sidebar), and a chevron pointing in the direction the sidebar will move.
+  const ICON_CLOSE = `
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+         stroke="currentColor" stroke-width="1.8"
+         stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <rect x="3" y="3" width="18" height="18" rx="2.5"/>
+      <line x1="9" y1="3" x2="9" y2="21"/>
+      <path d="M16 15l-3-3 3-3"/>
+    </svg>`;
+  const ICON_OPEN = `
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+         stroke="currentColor" stroke-width="1.8"
+         stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <rect x="3" y="3" width="18" height="18" rx="2.5"/>
+      <line x1="9" y1="3" x2="9" y2="21"/>
+      <path d="M14 9l3 3-3 3"/>
+    </svg>`;
+
   const applySidebarState = (collapsed) => {
     shell.classList.toggle('sidebar-collapsed', collapsed);
-    toggleBtn.textContent = collapsed ? '☰' : '✕';
+    toggleBtn.innerHTML = collapsed ? ICON_OPEN : ICON_CLOSE;
     toggleBtn.title = collapsed ? 'Show sidebar' : 'Hide sidebar';
+    toggleBtn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
   };
   applySidebarState(localStorage.getItem(SIDEBAR_KEY) === '1');
   toggleBtn.addEventListener('click', () => {
