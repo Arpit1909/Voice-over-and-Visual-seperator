@@ -1154,17 +1154,14 @@ body::before {
 .export-group .btn-ghost:hover { background: var(--accent-soft); color: var(--accent); }
 
 /* Two-column viewer:
-   - Script column gets a comfortable reading width (54ch ≈ 700px) so long
-     paragraphs don't sprawl across a wide screen.
-   - Whatever room is left after the script column goes to the player rail,
-     so the player automatically grows on bigger screens (laptop → 27" → 4K).
-   - Min width on the player rail is 420 px so it never gets cramped. */
+   - Script column is fixed at the comfortable reading width.
+   - Player rail takes ALL remaining space — bigger screens → bigger player. */
 .viewer-layout {
   max-width: none;
   margin: 0;
   padding: clamp(18px, 2vw, 32px) clamp(20px, 3vw, 56px) 80px;
   display: grid;
-  grid-template-columns: minmax(560px, 54ch) minmax(420px, 1fr);
+  grid-template-columns: minmax(0, 620px) minmax(480px, 1fr);
   gap: clamp(24px, 2.4vw, 44px);
   align-items: start;
 }
@@ -1185,9 +1182,9 @@ body::before {
 }
 .viewer-player-pane .player-card {
   max-height: calc(100vh - 36px);
-  /* Cap card width on truly enormous screens — past ~960 px the video itself
-     stops gaining detail and the script just feels smaller for no reason. */
-  max-width: 960px;
+  /* Soft cap on enormous 4K/ultrawide screens; below this the player
+     auto-grows to fill the rail. */
+  max-width: 1400px;
   /* Hug the script column on the left; let extra space sit on the right. */
   margin-left: 0;
   margin-right: auto;
@@ -1311,30 +1308,25 @@ body::before {
   color: var(--text-3);
 }
 
-/* The beat */
+/* The beat — now a transparent grouping container; VO and Visual are real
+   cards inside. The beat itself is just a header strip + the two cards. */
 .beat {
   position: relative;
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: clamp(14px, 1.4vw, 22px) clamp(16px, 1.6vw, 26px) clamp(16px, 1.6vw, 24px);
-  margin-bottom: clamp(10px, 1vw, 16px);
-  cursor: pointer;
-  transition: border-color .15s, box-shadow .2s, transform .12s;
-}
-.beat:hover { border-color: var(--border-strong); box-shadow: 0 4px 16px rgba(0,0,0,.3); }
-.beat--active {
-  border-color: var(--accent-line);
-  background: linear-gradient(180deg, var(--panel) 0%, var(--panel-hi) 100%);
-  box-shadow: var(--shadow-glow);
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  margin-bottom: clamp(18px, 2vw, 32px);
+  cursor: default;
 }
 .beat--active::before {
   content: "";
   position: absolute;
-  left: -1px; top: 18px; bottom: 18px;
+  left: 0; top: 0; bottom: clamp(18px, 2vw, 32px);
   width: 3px;
   border-radius: 2px;
   background: linear-gradient(180deg, var(--accent), var(--accent-hi));
+  z-index: 1;
 }
 
 .beat-head {
@@ -1342,9 +1334,9 @@ body::before {
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
-  padding-bottom: 14px;
-  margin-bottom: 16px;
-  border-bottom: 1px solid var(--line);
+  padding: 0 4px 12px;
+  margin-bottom: 12px;
+  border-bottom: none;
 }
 .beat-head-spacer { flex: 1; }
 .beat-number-pill {
@@ -1414,24 +1406,49 @@ body::before {
   opacity: .9;
 }
 
-/* Body grid — auto-stacks when columns would each be narrower than ~280px */
+/* Body grid — VO and Visual are now SEPARATE cards. Auto-stacks when
+   columns would each be narrower than ~300px. */
 .beat-body {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: clamp(14px, 1.6vw, 26px);
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: clamp(14px, 1.4vw, 22px);
   min-width: 0;
 }
 
+/* Each column is now its own elevated card. */
 .vo-col, .vis-col {
   display: flex;
   flex-direction: column;
-  background: transparent;
-  border-left: 2px solid;
-  padding-left: 16px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: clamp(14px, 1.2vw, 20px) clamp(16px, 1.4vw, 22px);
   min-width: 0;
+  box-shadow: var(--shadow-sm);
+  transition: border-color .15s, box-shadow .2s;
+  position: relative;
+  cursor: pointer;
 }
-.vo-col  { border-left-color: var(--vo-border); }
-.vis-col { border-left-color: var(--vis-border); }
+.vo-col:hover, .vis-col:hover {
+  border-color: var(--border-strong);
+  box-shadow: 0 4px 14px rgba(20,20,18,.06);
+}
+/* Left edge accent ribbon — subtle identity for VO vs Visual. */
+.vo-col::before, .vis-col::before {
+  content: "";
+  position: absolute;
+  left: -1px; top: -1px; bottom: -1px;
+  width: 3px;
+  border-top-left-radius: var(--radius);
+  border-bottom-left-radius: var(--radius);
+}
+.vo-col::before  { background: var(--vo-border); }
+.vis-col::before { background: var(--vis-border); }
+.beat--active .vo-col,
+.beat--active .vis-col {
+  border-color: var(--accent-line);
+  box-shadow: 0 0 0 1px var(--accent-line), 0 6px 24px rgba(184,90,57,.10);
+}
 
 .col-header {
   display: flex;
