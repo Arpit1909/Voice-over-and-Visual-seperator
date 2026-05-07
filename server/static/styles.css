@@ -2231,6 +2231,21 @@ body.player-resizing * {
     0 12px 40px rgba(0, 0, 0, 0.4);
   transition: box-shadow .2s ease;
 }
+
+/* When the resize handle is the current tour target it gets a fully
+   visible bright copper bar so users can actually find it. (Normally
+   the handle is almost invisible at rest until you hover.) */
+.tour-highlight.player-resize-handle::before {
+  background: var(--accent) !important;
+  width: 5px !important;
+  height: 80px !important;
+  box-shadow: 0 0 16px rgba(184, 90, 57, 0.8);
+  animation: tour-handle-pulse 1.4s ease-in-out infinite;
+}
+@keyframes tour-handle-pulse {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.18); }
+}
 .tour-tooltip {
   position: fixed;
   z-index: 9002;

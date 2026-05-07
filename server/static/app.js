@@ -2331,7 +2331,7 @@ async function boot() {
 // waits for the user to actually DO the thing (click a timestamp, press
 // Space, select text, etc.) before auto-advancing. A "Skip step" link
 // lets impatient users move on without doing the action.
-const TOUR_VERSION = 'v2-handson';
+const TOUR_VERSION = 'v3-clearer';
 const TOUR_STEPS = [
   {
     title: 'Welcome 👋',
@@ -2347,7 +2347,7 @@ const TOUR_STEPS = [
   {
     target: '.beat .ts-badge.ts-seek',
     title: '🎯 Try it: jump to a moment',
-    body: 'Click <strong>any timestamp</strong> in the script (the bracketed copper or green text). The video will jump to that exact moment.',
+    body: 'Look at the top of any row — you\'ll see timestamps like <strong>[00:00:07 – 00:00:12]</strong> (copper, in the VO column) or <strong>(00:00:07 – 00:00:12)</strong> (green, in the Visuals column). <strong>Click any one</strong> and the video jumps to that exact moment.',
     autoAdvance: (advance) => {
       const onClick = (e) => { if (e.target.closest('.ts-seek')) advance(); };
       document.addEventListener('click', onClick, true);
@@ -2357,7 +2357,7 @@ const TOUR_STEPS = [
   {
     target: '.player-card',
     title: '🎯 Try it: play / pause',
-    body: 'Press <kbd>Space</kbd> on your keyboard to start or pause the video. Works from anywhere on the page (except inside text fields).',
+    body: 'Click anywhere on the page that <em>isn\'t</em> a text field, then press the <kbd>Space</kbd> bar on your keyboard. The video plays or pauses. Press it again to toggle.',
     autoAdvance: (advance) => {
       const onKey = (e) => {
         if (e.code === 'Space') {
@@ -2373,7 +2373,7 @@ const TOUR_STEPS = [
   {
     target: '.beat .vo-text, .beat .vis-desc',
     title: '🎯 Try it: add a comment',
-    body: 'Drag your cursor over <strong>any text</strong> in a beat (VO line, visual description, anything). A small "💬 Add comment" button will pop up — that\'s how you start a comment.',
+    body: 'Pick any sentence in the script (VO line, visual description, on-screen text — anything). <strong>Click and drag your mouse across a few words</strong> to highlight them, then release. A copper <strong>"💬 Add comment"</strong> button pops up near your selection — click it to write your comment.',
     autoAdvance: (advance) => {
       const obs = new MutationObserver(() => {
         if (document.querySelector('.cmt-add-floating')) advance();
@@ -2385,7 +2385,7 @@ const TOUR_STEPS = [
   {
     target: '.player-comments-tabs',
     title: '🎯 Try it: see all comments',
-    body: 'Click the <strong>"All"</strong> tab to see every comment in this analysis with a "Beat N" label. Click any row in that list to jump back to its highlight.',
+    body: 'Below the video player there\'s a small <strong>"Current | All"</strong> pill toggle. <strong>Click "All"</strong> — every comment in this analysis appears with a "Beat N" label. Clicking any row jumps the script back to that highlight.',
     autoAdvance: (advance) => {
       const onClick = (e) => {
         const t = e.target.closest('.player-comments-tab');
@@ -2398,7 +2398,7 @@ const TOUR_STEPS = [
   {
     target: '.player-resize-handle',
     title: '🎯 Try it: resize the player',
-    body: 'See the thin copper line on the <strong>left edge of the video player</strong>? Drag it left or right to resize. Double-click to reset to default.',
+    body: 'On the <strong>left edge of the video player</strong>, there\'s a small copper bar (we just made it brighter so you can see it). <strong>Press and hold your mouse on it, then drag left to make the player bigger</strong> or right to make it smaller. Double-click that bar to reset to default size.',
     autoAdvance: (advance) => {
       const handle = document.querySelector('.player-resize-handle');
       if (!handle) { advance(); return () => {}; }
