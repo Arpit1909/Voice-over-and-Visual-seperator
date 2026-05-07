@@ -1019,7 +1019,11 @@ def _run_analysis_with_prompt(gcs_uri: str, project_id: str, location: str,
                     break  # try next model after second failure
 
                 if "429" in msg or "resource_exhausted" in msg.lower() or "quota" in msg.lower():
-                    wait = 20 * (2 ** attempt)  # 20s, 40s, 80s, 160s, 320s
+                    # Patient exponential backoff capped at 240s — total budget
+                    # over 5 attempts: 30 + 60 + 120 + 240 + 240 = 11.5 min,
+                    # which absorbs Vertex AI's per-minute quota windows
+                    # without giving up on the chunk.
+                    wait = min(30 * (2 ** attempt), 240)
                     print(f"  Rate limit hit. Waiting {wait}s before retry ({attempt + 1}/{MAX_RETRIES})...")
                     time.sleep(wait)
                     continue  # retry same model
