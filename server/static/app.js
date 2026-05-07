@@ -2368,7 +2368,7 @@ async function _showTourFromAnywhere() {
 // waits for the user to actually DO the thing (click a timestamp, press
 // Space, select text, etc.) before auto-advancing. A "Skip step" link
 // lets impatient users move on without doing the action.
-const TOUR_VERSION = 'v3-clearer';
+const TOUR_VERSION = 'v4-fixed-highlights';
 const TOUR_STEPS = [
   {
     title: 'Welcome 👋',
@@ -2445,14 +2445,20 @@ const TOUR_STEPS = [
     },
   },
   {
-    target: '#history-list',
+    target: '#sidebar',
     title: 'History sidebar',
-    body: 'Every analysis you and your team have run lives here, with a pill showing who ran it. Click any row to reopen. Hover for rename / delete.',
+    body: 'On the <strong>left side of the page</strong> you have the History list — every analysis you and your team have run, with a pill showing who ran it. <strong>Click any row to reopen</strong> it. Hover a row to see rename / delete buttons.',
+    waitForNext: true,
+  },
+  {
+    target: '#tour-replay-btn',
+    title: 'Replay this tour anytime',
+    body: 'See the <strong>"Show tour"</strong> link at the bottom of the sidebar? Click it whenever you want to walk through these features again — or to onboard a new teammate.',
     waitForNext: true,
   },
   {
     title: "You're set 🎉",
-    body: 'That\'s the tour. Submit a new analysis from <strong>+ New Analysis</strong> in the sidebar, or replay this tour anytime via the <strong>Show tour</strong> link below.',
+    body: 'That\'s the tour. Submit a new analysis from <strong>+ New Analysis</strong> in the sidebar, or replay this tour anytime via the <strong>Show tour</strong> link.',
     waitForNext: true,
   },
 ];

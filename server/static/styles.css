@@ -2232,20 +2232,33 @@ body.player-resizing * {
   transition: box-shadow .2s ease;
 }
 
-/* When the resize handle is the current tour target it gets a fully
-   visible bright copper bar so users can actually find it. (Normally
-   the handle is almost invisible at rest until you hover.) */
+/* The resize handle stretches the full height of the player rail, so a
+   normal box-shadow highlight reads as a giant vertical streak. Instead,
+   suppress the default ring and render a focused, animated copper "pill"
+   centered on the actual drag bar so users see exactly where to grab. */
+.tour-highlight.player-resize-handle {
+  box-shadow: none !important;
+}
 .tour-highlight.player-resize-handle::before {
   background: var(--accent) !important;
-  width: 5px !important;
-  height: 80px !important;
-  box-shadow: 0 0 16px rgba(184, 90, 57, 0.8);
+  width: 6px !important;
+  height: 96px !important;
+  box-shadow:
+    0 0 0 6px rgba(184, 90, 57, 0.30),
+    0 0 0 14px rgba(184, 90, 57, 0.14),
+    0 0 22px rgba(184, 90, 57, 0.55);
   animation: tour-handle-pulse 1.4s ease-in-out infinite;
 }
 @keyframes tour-handle-pulse {
   0%, 100% { transform: scale(1); }
-  50%      { transform: scale(1.18); }
+  50%      { transform: scale(1.20); }
 }
+
+/* While the tour is active, lift overflow clipping on containers whose
+   highlight rings would otherwise be cut off (notably the sidebar, whose
+   overflow:hidden would chop the ring on #history-list). */
+body:has(.tour-backdrop) .sidebar { overflow: visible !important; }
+body:has(.tour-backdrop) .viewer-player-pane { overflow: visible !important; }
 .tour-tooltip {
   position: fixed;
   z-index: 9002;
