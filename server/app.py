@@ -196,6 +196,11 @@ async def api_analyze(
             507, f"Storage full ({s['used_gb']}/{s['limit_gb']} GB). "
                  "Delete old analyses first.")
 
+    # Capture who triggered this analysis so the History list can attribute it.
+    _u = auth.get_user(request) or {}
+    _by_name  = _u.get('name')  or None
+    _by_email = _u.get('email') or None
+
     if url and url.strip():
         # Pull the URL out of share-blob pastes ("Title\n\nyoutu.be/...") so
         # yt-dlp doesn't get the title baked into the URL argument.
@@ -203,7 +208,10 @@ async def api_analyze(
         url = extract_url(url)
         if not url:
             raise HTTPException(400, "Couldn't find a YouTube/HTTP URL in your input.")
-        analysis_id = storage.create_analysis(source='youtube', source_url=url)
+        analysis_id = storage.create_analysis(
+            source='youtube', source_url=url,
+            created_by_name=_by_name, created_by_email=_by_email,
+        )
     elif file and file.filename:
         ext = Path(file.filename).suffix.lower()
         if ext not in _VIDEO_EXTS:
@@ -211,6 +219,7 @@ async def api_analyze(
         analysis_id = storage.create_analysis(
             source='upload', source_url=file.filename,
             title=Path(file.filename).stem,
+            created_by_name=_by_name, created_by_email=_by_email,
         )
         target = ANALYSES_DIR / analysis_id / f'upload{ext}'
         target.parent.mkdir(parents=True, exist_ok=True)

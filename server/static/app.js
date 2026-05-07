@@ -257,12 +257,22 @@ async function refreshHistory() {
         queued: '<span class="hist-badge hist-badge--run">Queued</span>',
         error: '<span class="hist-badge hist-badge--err">Failed</span>',
       }[status] || '';
+      // "Run by" pill — shows the name (or email-prefix fallback) of whoever
+      // triggered the analysis. Older rows that pre-date this column have
+      // it null; show 'Anonymous' for those.
+      const ownerLabel = (it.created_by_name && it.created_by_name.trim())
+        || (it.created_by_email ? it.created_by_email.split('@')[0] : '')
+        || '';
+      const ownerPill = ownerLabel
+        ? `<span class="hist-owner" title="Run by ${esc(it.created_by_email || ownerLabel)}">${esc(ownerLabel)}</span>`
+        : '';
       return `
         <div class="hist-item" data-id="${esc(it.id)}" data-status="${esc(status)}">
           <div class="hist-item-main">
             <div class="hist-title" title="${esc(it.title || 'Untitled')}">${esc(it.title || 'Untitled')}</div>
             <div class="hist-meta">
               ${badge}
+              ${ownerPill}
               <span>${fmtDuration(it.duration_secs)}</span>
               <span>·</span>
               <span>${esc(fmtRel(it.created_at))}</span>

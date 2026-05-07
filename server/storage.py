@@ -57,6 +57,10 @@ def init_db():
             "ALTER TABLE comments ADD COLUMN start_offset INTEGER",
             "ALTER TABLE comments ADD COLUMN end_offset INTEGER",
             "ALTER TABLE comments ADD COLUMN resolved INTEGER DEFAULT 0",
+            # Track who ran each analysis so the History list can show
+            # 'Run by <name>'. Older rows will simply have NULL here.
+            "ALTER TABLE analyses ADD COLUMN created_by_name TEXT",
+            "ALTER TABLE analyses ADD COLUMN created_by_email TEXT",
         ):
             try:
                 c.execute(ddl)
@@ -79,13 +83,17 @@ def get_analysis(analysis_id):
         return dict(row) if row else None
 
 
-def create_analysis(source, source_url, title='Pending analysis...'):
+def create_analysis(source, source_url, title='Pending analysis...',
+                    created_by_name=None, created_by_email=None):
     aid = uuid.uuid4().hex[:12]
     with _lock, _conn() as c:
         c.execute(
-            "INSERT INTO analyses (id, title, source, source_url, created_at, status) "
-            "VALUES (?, ?, ?, ?, ?, 'queued')",
-            (aid, title, source, source_url, int(time.time()))
+            "INSERT INTO analyses "
+            "(id, title, source, source_url, created_at, status, "
+            " created_by_name, created_by_email) "
+            "VALUES (?, ?, ?, ?, ?, 'queued', ?, ?)",
+            (aid, title, source, source_url, int(time.time()),
+             created_by_name, created_by_email)
         )
     (ANALYSES_DIR / aid).mkdir(exist_ok=True, parents=True)
     return aid

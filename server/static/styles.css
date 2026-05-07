@@ -525,6 +525,25 @@ body::before {
 .hist-badge--run  { background: var(--warn-soft);    color: var(--warn); }
 .hist-badge--err  { background: var(--danger-soft);  color: var(--danger); }
 
+/* "Run by" pill — same shape as status badges, but a neutral grey-on-grey
+   so it reads as metadata rather than a state. */
+.hist-owner {
+  font-family: var(--font-body);
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  padding: 2px 7px;
+  border-radius: 999px;
+  text-transform: none;
+  color: var(--text-2);
+  background: var(--panel-soft);
+  border: 1px solid var(--border);
+  max-width: 110px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .hist-actions {
   display: flex;
   gap: 4px;
