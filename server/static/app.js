@@ -2368,7 +2368,7 @@ async function _showTourFromAnywhere() {
 // waits for the user to actually DO the thing (click a timestamp, press
 // Space, select text, etc.) before auto-advancing. A "Skip step" link
 // lets impatient users move on without doing the action.
-const TOUR_VERSION = 'v6-locked-until-complete';
+const TOUR_VERSION = 'v7-prod-ready';
 const TOUR_STEPS = [
   {
     title: 'Welcome 👋',
