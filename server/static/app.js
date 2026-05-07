@@ -2368,7 +2368,7 @@ async function _showTourFromAnywhere() {
 // waits for the user to actually DO the thing (click a timestamp, press
 // Space, select text, etc.) before auto-advancing. A "Skip step" link
 // lets impatient users move on without doing the action.
-const TOUR_VERSION = 'v4-fixed-highlights';
+const TOUR_VERSION = 'v5-pulse-and-sidebar';
 const TOUR_STEPS = [
   {
     title: 'Welcome 👋',
@@ -2503,10 +2503,27 @@ function startWelcomeTour({ force = false } = {}) {
 
     document.querySelectorAll('.tour-highlight').forEach(el => el.classList.remove('tour-highlight'));
     const step = TOUR_STEPS[i];
+
+    // If this step targets something inside the sidebar, force the sidebar
+    // open — collapsed sidebar means the target isn't visible, so the
+    // highlight ring would be invisible / clipped.
+    const sidebarTargets = ['#sidebar', '#history-list', '#tour-replay-btn', '.brand', '.history-list', '.hist-item'];
+    if (step.target && sidebarTargets.some(s => step.target.includes(s.replace(/^[#.]/,'').slice(0,12)))) {
+      const shell = document.querySelector('.app-shell');
+      if (shell?.classList.contains('sidebar-collapsed')) {
+        shell.classList.remove('sidebar-collapsed');
+        try { localStorage.setItem('sidebar-collapsed', '0'); } catch { /* */ }
+      }
+    }
+
     const target = step.target ? document.querySelector(step.target) : null;
     if (target) {
       target.classList.add('tour-highlight');
-      target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      // Wait for layout (e.g. sidebar expanding animation) to settle before
+      // scrolling, otherwise the target's bounding rect is stale.
+      requestAnimationFrame(() => {
+        target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      });
     }
 
     const isLast       = i === TOUR_STEPS.length - 1;
