@@ -2269,7 +2269,18 @@ body.player-resizing * {
   font-size: 13px;
   line-height: 1.6;
   color: var(--text-2);
-  margin-bottom: 18px;
+  margin-bottom: 14px;
+}
+.tour-handson-hint {
+  font-size: 11px;
+  font-style: italic;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border: 1px dashed var(--accent-line);
+  padding: 6px 10px;
+  border-radius: 6px;
+  margin-bottom: 14px;
+  text-align: center;
 }
 .tour-tooltip kbd {
   font-family: var(--font-mono);

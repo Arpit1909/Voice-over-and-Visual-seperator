@@ -2314,45 +2314,96 @@ async function boot() {
 }
 
 // ── Welcome tour ──────────────────────────────────────────────────────────
-// One-time guided overlay that explains the key features of the viewer.
-// Stored completion is keyed on the version string so we can re-trigger
-// for everyone if a future tour version adds new steps.
-const TOUR_VERSION = 'v1';
+// Hands-on guided overlay: each step highlights the relevant feature and
+// waits for the user to actually DO the thing (click a timestamp, press
+// Space, select text, etc.) before auto-advancing. A "Skip step" link
+// lets impatient users move on without doing the action.
+const TOUR_VERSION = 'v2-handson';
 const TOUR_STEPS = [
   {
-    target: null,
-    title: 'Welcome to VO & Visual Extractor',
-    body: "Quick 30-second tour of the analysis viewer. Skip anytime.",
+    title: 'Welcome 👋',
+    body: 'Quick hands-on tour of the main features. Try each action as you go — or click "Skip step" if you\'d rather not.',
+    waitForNext: true,
   },
   {
     target: '.script-table-head',
-    title: 'The script table',
-    body: "VO is the narrator's voice-over. Visuals is what's on screen at that moment. Each row is a beat — one synced moment in the video.",
+    title: 'The script',
+    body: '<strong>VO</strong> is the narrator. <strong>Visuals</strong> is what\'s on screen. Each row is a beat — one synced moment in the video.',
+    waitForNext: true,
+  },
+  {
+    target: '.beat .ts-badge.ts-seek',
+    title: '🎯 Try it: jump to a moment',
+    body: 'Click <strong>any timestamp</strong> in the script (the bracketed copper or green text). The video will jump to that exact moment.',
+    autoAdvance: (advance) => {
+      const onClick = (e) => { if (e.target.closest('.ts-seek')) advance(); };
+      document.addEventListener('click', onClick, true);
+      return () => document.removeEventListener('click', onClick, true);
+    },
   },
   {
     target: '.player-card',
-    title: 'Video player',
-    body: "Click any timestamp or beat row to jump there. Press <kbd>Space</kbd> to play / pause. Drag the left edge of the player to resize it; double-click that edge to reset.",
+    title: '🎯 Try it: play / pause',
+    body: 'Press <kbd>Space</kbd> on your keyboard to start or pause the video. Works from anywhere on the page (except inside text fields).',
+    autoAdvance: (advance) => {
+      const onKey = (e) => {
+        if (e.code === 'Space') {
+          const t = e.target;
+          const typing = t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
+          if (!typing) advance();
+        }
+      };
+      document.addEventListener('keydown', onKey);
+      return () => document.removeEventListener('keydown', onKey);
+    },
   },
   {
-    target: '.player-comments',
-    title: 'Comments — contextual',
-    body: 'Select any text in the script and an "Add comment" button appears. The panel here shows comments for the beat you\'re reading. Switch to "All" to see every comment with a beat label — click any to jump to its highlight.',
+    target: '.beat .vo-text, .beat .vis-desc',
+    title: '🎯 Try it: add a comment',
+    body: 'Drag your cursor over <strong>any text</strong> in a beat (VO line, visual description, anything). A small "💬 Add comment" button will pop up — that\'s how you start a comment.',
+    autoAdvance: (advance) => {
+      const obs = new MutationObserver(() => {
+        if (document.querySelector('.cmt-add-floating')) advance();
+      });
+      obs.observe(document.body, { childList: true, subtree: true });
+      return () => obs.disconnect();
+    },
+  },
+  {
+    target: '.player-comments-tabs',
+    title: '🎯 Try it: see all comments',
+    body: 'Click the <strong>"All"</strong> tab to see every comment in this analysis with a "Beat N" label. Click any row in that list to jump back to its highlight.',
+    autoAdvance: (advance) => {
+      const onClick = (e) => {
+        const t = e.target.closest('.player-comments-tab');
+        if (t && t.dataset.mode === 'all') advance();
+      };
+      document.addEventListener('click', onClick, true);
+      return () => document.removeEventListener('click', onClick, true);
+    },
+  },
+  {
+    target: '.player-resize-handle',
+    title: '🎯 Try it: resize the player',
+    body: 'See the thin copper line on the <strong>left edge of the video player</strong>? Drag it left or right to resize. Double-click to reset to default.',
+    autoAdvance: (advance) => {
+      const handle = document.querySelector('.player-resize-handle');
+      if (!handle) { advance(); return () => {}; }
+      const onDown = () => advance();
+      handle.addEventListener('pointerdown', onDown, { once: true });
+      return () => handle.removeEventListener('pointerdown', onDown);
+    },
   },
   {
     target: '#history-list',
-    title: 'History',
-    body: 'Every past analysis lives here, with a pill showing who ran it. Click to reopen. Hover for rename / delete.',
+    title: 'History sidebar',
+    body: 'Every analysis you and your team have run lives here, with a pill showing who ran it. Click any row to reopen. Hover for rename / delete.',
+    waitForNext: true,
   },
   {
-    target: '.viewer-actions',
-    title: 'Export & share',
-    body: 'Download the script as PDF, DOCX, or TXT. "Share link" copies a URL your teammates can open and comment on.',
-  },
-  {
-    target: null,
     title: "You're set 🎉",
-    body: 'Submit any YouTube URL or upload a file from "New Analysis" to begin. You can replay this tour anytime via "Show tour" in the sidebar.',
+    body: 'That\'s the tour. Submit a new analysis from <strong>+ New Analysis</strong> in the sidebar, or replay this tour anytime via the <strong>Show tour</strong> link below.',
+    waitForNext: true,
   },
 ];
 
@@ -2361,7 +2412,7 @@ function startWelcomeTour({ force = false } = {}) {
     if (!force && localStorage.getItem('tour-completed') === TOUR_VERSION) return;
   } catch { /* */ }
 
-  // Tear down any prior tour DOM (e.g. replay click while one's running).
+  // Tear down any prior tour DOM (e.g. replay click during one).
   document.querySelectorAll('.tour-backdrop, .tour-tooltip').forEach(el => el.remove());
   document.querySelectorAll('.tour-highlight').forEach(el => el.classList.remove('tour-highlight'));
 
@@ -2374,16 +2425,20 @@ function startWelcomeTour({ force = false } = {}) {
   document.body.appendChild(tip);
 
   let idx = 0;
+  let stepCleanup = null;   // teardown for the current step's autoAdvance listener
 
   const cleanup = () => {
+    if (stepCleanup) { try { stepCleanup(); } catch { /* */ } stepCleanup = null; }
     document.querySelectorAll('.tour-highlight').forEach(el => el.classList.remove('tour-highlight'));
     backdrop.remove();
     tip.remove();
+    document.removeEventListener('keydown', onKey);
     try { localStorage.setItem('tour-completed', TOUR_VERSION); } catch { /* */ }
   };
 
   const showStep = (i) => {
     if (i < 0 || i >= TOUR_STEPS.length) return cleanup();
+    if (stepCleanup) { try { stepCleanup(); } catch { /* */ } stepCleanup = null; }
     idx = i;
 
     document.querySelectorAll('.tour-highlight').forEach(el => el.classList.remove('tour-highlight'));
@@ -2394,16 +2449,21 @@ function startWelcomeTour({ force = false } = {}) {
       target.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
 
-    const isLast = i === TOUR_STEPS.length - 1;
+    const isLast       = i === TOUR_STEPS.length - 1;
+    const isHandsOn    = !!step.autoAdvance;
+    const handsOnHint  = isHandsOn ? `<div class="tour-handson-hint">Auto-advances when you do the action ↑</div>` : '';
     tip.innerHTML = `
-      <div class="tour-step-num">Step ${i + 1} of ${TOUR_STEPS.length}</div>
+      <div class="tour-step-num">Step ${i + 1} of ${TOUR_STEPS.length}${isHandsOn ? ' · Try it!' : ''}</div>
       <h3>${step.title}</h3>
       <p>${step.body}</p>
+      ${handsOnHint}
       <div class="tour-actions">
-        <button class="tour-skip" type="button">${isLast ? 'Close' : 'Skip tour'}</button>
+        <button class="tour-skip" type="button">End tour</button>
         <div class="tour-nav">
           ${i > 0 ? '<button class="tour-prev" type="button">Back</button>' : ''}
-          <button class="tour-next btn-primary btn-small" type="button">${isLast ? 'Got it' : 'Next →'}</button>
+          ${isHandsOn
+            ? '<button class="tour-next" type="button">Skip step →</button>'
+            : `<button class="tour-next btn-primary btn-small" type="button">${isLast ? 'Got it' : 'Next →'}</button>`}
         </div>
       </div>`;
 
@@ -2413,14 +2473,12 @@ function startWelcomeTour({ force = false } = {}) {
       const tipW = tipRect.width || 360;
       const tipH = tipRect.height || 200;
       const margin = 16;
-
       if (!target) {
-        tip.style.left = `${(window.innerWidth  - tipW) / 2}px`;
+        tip.style.left = `${(window.innerWidth - tipW) / 2}px`;
         tip.style.top  = `${(window.innerHeight - tipH) / 2}px`;
         return;
       }
       const r = target.getBoundingClientRect();
-      // Try below first, then above, then to the side, falling back to center.
       let top  = r.bottom + 14;
       let left = r.left + r.width / 2 - tipW / 2;
       if (top + tipH + margin > window.innerHeight) top = Math.max(margin, r.top - tipH - 14);
@@ -2433,13 +2491,21 @@ function startWelcomeTour({ force = false } = {}) {
     tip.querySelector('.tour-skip').addEventListener('click', cleanup);
     tip.querySelector('.tour-next').addEventListener('click', () => showStep(idx + 1));
     tip.querySelector('.tour-prev')?.addEventListener('click', () => showStep(idx - 1));
+
+    // Hands-on step: register the auto-advance listener and let the user
+    // complete the action. Pass an `advance` fn that moves to the next step.
+    if (isHandsOn) {
+      stepCleanup = step.autoAdvance(() => {
+        // Only advance if we're still on this step (user might have clicked Next first).
+        if (idx === i) showStep(i + 1);
+      });
+    }
   };
 
-  // Esc key closes the tour. Bound once per tour run.
   const onKey = (e) => {
-    if (e.key === 'Escape') { cleanup(); document.removeEventListener('keydown', onKey); }
-    else if (e.key === 'ArrowRight') { showStep(idx + 1); }
-    else if (e.key === 'ArrowLeft')  { showStep(idx - 1); }
+    if (e.key === 'Escape') cleanup();
+    else if (e.key === 'ArrowRight') showStep(idx + 1);
+    else if (e.key === 'ArrowLeft')  showStep(idx - 1);
   };
   document.addEventListener('keydown', onKey);
   backdrop.addEventListener('click', cleanup);
