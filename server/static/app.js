@@ -2310,7 +2310,20 @@ async function boot() {
   // any time. The first-time auto-trigger is in openViewer (so the tour
   // starts AFTER they have a real analysis to look at, not on a blank app).
   const tourBtn = $('#tour-replay-btn');
-  if (tourBtn) tourBtn.addEventListener('click', () => startWelcomeTour({ force: true }));
+  if (tourBtn) {
+    tourBtn.addEventListener('click', () => startWelcomeTour({ force: true }));
+  } else {
+    console.warn('[tour] #tour-replay-btn not found — sidebar markup probably stale, hard-refresh');
+  }
+
+  // Make the tour controls reachable from DevTools so users can debug:
+  //   window.startTour()        → run the tour now (force)
+  //   window.resetTour()        → clear completion flag, next viewer auto-plays
+  window.startTour = () => startWelcomeTour({ force: true });
+  window.resetTour = () => {
+    try { localStorage.removeItem('tour-completed'); } catch { /* */ }
+    console.log('[tour] reset — open any analysis to auto-play, or run startTour()');
+  };
 }
 
 // ── Welcome tour ──────────────────────────────────────────────────────────
@@ -2409,8 +2422,12 @@ const TOUR_STEPS = [
 
 function startWelcomeTour({ force = false } = {}) {
   try {
-    if (!force && localStorage.getItem('tour-completed') === TOUR_VERSION) return;
+    if (!force && localStorage.getItem('tour-completed') === TOUR_VERSION) {
+      console.log('[tour] suppressed — already completed. Click "Show tour" in the sidebar to replay.');
+      return;
+    }
   } catch { /* */ }
+  console.log('[tour] starting…', { force, version: TOUR_VERSION });
 
   // Tear down any prior tour DOM (e.g. replay click during one).
   document.querySelectorAll('.tour-backdrop, .tour-tooltip').forEach(el => el.remove());
