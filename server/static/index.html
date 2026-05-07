@@ -212,6 +212,9 @@
         </div>
       </header>
 
+      <!-- Full-width summary block sits BELOW the viewer-layout so it can
+           occupy the centered max-width without being squeezed inside the
+           script column. Populated by JS via renderSummary(). -->
       <div class="viewer-layout">
         <div class="viewer-script-pane" id="viewer-script">
           <!-- beats injected here -->
@@ -258,6 +261,10 @@
           </section>
         </aside>
       </div>
+
+      <!-- Centered, full-width summary block (renders below the script /
+           player layout instead of inside the script column). -->
+      <div id="viewer-summary" class="viewer-summary"></div>
     </section>
 
     <!-- Toast container -->

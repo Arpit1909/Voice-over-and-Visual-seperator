@@ -2040,6 +2040,14 @@ body.player-resizing * {
 /* ═══════════════════════════════════════════════════════════════════════════
    SUMMARY
    ═══════════════════════════════════════════════════════════════════════════ */
+/* Centered, full-width summary block. Lives outside the viewer-layout so
+   it isn't constrained to the left script column. */
+.viewer-summary {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 0 clamp(20px, 2.4vw, 44px) 80px;
+}
+
 .summary-section {
   margin-top: 40px;
   padding-top: 28px;
@@ -2047,16 +2055,56 @@ body.player-resizing * {
 }
 .summary-title {
   font-family: var(--font-display);
-  font-size: clamp(20px, 1vw + 14px, 26px);
+  font-size: clamp(22px, 1vw + 14px, 28px);
   font-weight: 380;
-  margin-bottom: 18px;
+  margin-bottom: 22px;
   letter-spacing: -0.01em;
   font-variation-settings: 'opsz' 36, 'SOFT' 30;
+  text-align: center;
 }
-.summary-grid { display: grid; grid-template-columns: 1fr; gap: 16px; }
-@media (min-width: 900px) {
-  .summary-grid { grid-template-columns: 1.6fr 1fr; }
-  .sum-card--full { grid-column: 1 / -1; }
+
+/* Summary card: full-width, centered text body. */
+.summary-grid { display: flex; flex-direction: column; gap: 24px; }
+.sum-card--full { width: 100%; }
+
+/* Peak Moments + Key Highlights as a paired-column table — matches the
+   VO / Visuals table aesthetic up top with its own light-blue header. */
+.summary-grid .sum-card:not(.sum-card--full) {
+  /* When the two non-summary cards appear, stack them as a 2-col table. */
+}
+.summary-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+}
+.summary-pair-head {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  background: #cfe2f3;
+  border-bottom: 1px solid #9fc1e0;
+}
+.summary-pair-head > div {
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 600;
+  color: #1a1a1d;
+  text-align: center;
+  padding: 12px 16px;
+}
+.summary-pair-head > div:first-child { border-right: 1px solid #9fc1e0; }
+.summary-pair-col { min-width: 0; }
+.summary-pair-col + .summary-pair-col { border-left: 1px solid var(--line); }
+
+@media (max-width: 720px) {
+  .summary-pair,
+  .summary-pair-head { grid-template-columns: 1fr; }
+  .summary-pair-head > div:first-child { border-right: none; border-bottom: 1px solid #9fc1e0; }
+  .summary-pair-col + .summary-pair-col { border-left: none; border-top: 1px solid var(--border); }
 }
 .sum-card {
   background: var(--panel);
@@ -2076,13 +2124,15 @@ body.player-resizing * {
 }
 .sum-card-header small { font-weight: 400; color: var(--text-3); font-size: 11px; font-family: var(--font-mono); }
 .sum-body {
-  padding: 16px 18px;
+  padding: 22px clamp(20px, 3vw, 56px);
   font-family: var(--font-display);
-  font-size: 13.5px;
+  font-size: 14.5px;
   line-height: 1.85;
-  color: var(--text-2);
+  color: var(--text);
   white-space: pre-wrap;
-  font-variation-settings: 'opsz' 18;
+  font-variation-settings: 'opsz' 24;
+  max-width: 70ch;
+  margin: 0 auto;
 }
 /* Peak Moments — clickable rows separated by hairlines, no per-row cards. */
 .peaks-list {

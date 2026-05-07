@@ -935,8 +935,13 @@ function _renderViewer(id, payload, comments, token) {
       <div class="script-table-head-cell script-table-head-cell--vis">Visuals · On-screen</div>
     </div>`;
   root.innerHTML = tableHead +
-    beats.map((entry, gi) => renderBeat(entry, gi, beats, commentsByBeat[gi] || [])).join('') +
-    renderSummary(data);
+    beats.map((entry, gi) => renderBeat(entry, gi, beats, commentsByBeat[gi] || [])).join('');
+
+  // Summary lives in its OWN centered container below the layout, so it
+  // can be a comfortable reading-width block instead of being trapped in
+  // the script column on the left side of the page.
+  const sumEl = document.getElementById('viewer-summary');
+  if (sumEl) sumEl.innerHTML = renderSummary(data);
 
   // Wire seek handlers + comment forms
   attachViewerHandlers(id, root, beats);
@@ -1930,13 +1935,19 @@ function renderSummary(data) {
         <div class="sum-card-header">Full Summary</div>
         <p class="sum-body">${summary || '<em class="muted">No summary generated.</em>'}</p>
       </div>
-      <div class="sum-card">
-        <div class="sum-card-header">Peak Moments <small>(click to jump)</small></div>
-        <div class="peaks-list">${peaks}</div>
-      </div>
-      <div class="sum-card">
-        <div class="sum-card-header">Key Highlights</div>
-        <ul class="highlights-list">${highs}</ul>
+      <!-- Peak Moments | Key Highlights — paired columns under one
+           light-blue table header, matching the VO/Visuals layout. -->
+      <div class="summary-pair">
+        <div class="summary-pair-head">
+          <div>Peak Moments <small style="font-weight:400;color:#5a5a5a">(click to jump)</small></div>
+          <div>Key Highlights</div>
+        </div>
+        <div class="summary-pair-col">
+          <div class="peaks-list">${peaks}</div>
+        </div>
+        <div class="summary-pair-col">
+          <ul class="highlights-list">${highs}</ul>
+        </div>
       </div>
     </div>
   </div>`;
