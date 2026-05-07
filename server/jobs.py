@@ -135,15 +135,41 @@ def _capture_stdout(job_id: str):
         sys.stdout = orig
 
 
+# Ordered list of jobs currently *waiting* in the queue. Mirrors what's in
+# _queue.queue but lets us peek positions without poking at queue internals.
+_queued_ids: list[str] = []
+_queued_lock = threading.Lock()
+
+
+def _broadcast_queue_positions():
+    """Push the current 'N ahead of you' message to every waiting job."""
+    with _queued_lock:
+        snapshot = list(_queued_ids)
+    for i, qid in enumerate(snapshot):
+        if i == 0:
+            msg = 'Up next — starting as soon as the current analysis finishes…'
+        else:
+            ahead = i
+            msg = f'Queued — {ahead} analys{"is" if ahead == 1 else "es"} ahead of you'
+        _set_progress(qid, stage='queued', progress=0, message=msg)
+
+
 def _worker_loop():
     while True:
         job_id = _queue.get()
         try:
+            # Remove ourselves from the waiting list and tell everyone else
+            # they just moved up one spot.
+            with _queued_lock:
+                if job_id in _queued_ids:
+                    _queued_ids.remove(job_id)
+            _broadcast_queue_positions()
             _run(job_id)
         except Exception:
             traceback.print_exc()
         finally:
             _queue.task_done()
+            _broadcast_queue_positions()
 
 
 def start_worker():
@@ -160,7 +186,15 @@ def enqueue(job_id: str):
     start_worker()
     _reset_logs(job_id)
     _append_log(job_id, f'Queued analysis {job_id}')
-    _set_progress(job_id, stage='queued', progress=0, message='Queued for analysis')
+    # Compute this job's place in line and show that as its initial message.
+    with _queued_lock:
+        _queued_ids.append(job_id)
+        ahead = len(_queued_ids) - 1
+    if ahead == 0:
+        msg = 'Up next — starting now…'
+    else:
+        msg = f'Queued — {ahead} analys{"is" if ahead == 1 else "es"} ahead of you'
+    _set_progress(job_id, stage='queued', progress=0, message=msg)
     _queue.put(job_id)
 
 
