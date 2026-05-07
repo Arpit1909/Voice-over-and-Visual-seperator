@@ -257,15 +257,16 @@ async function refreshHistory() {
         queued: '<span class="hist-badge hist-badge--run">Queued</span>',
         error: '<span class="hist-badge hist-badge--err">Failed</span>',
       }[status] || '';
-      // "Run by" pill — shows the name (or email-prefix fallback) of whoever
-      // triggered the analysis. Older rows that pre-date this column have
-      // it null; show 'Anonymous' for those.
+      // "Run by" pill — shows the name (or email-prefix fallback) of
+      // whoever triggered the analysis. Older rows that pre-date this
+      // column have it null; show 'Anonymous' so the slot is consistent.
       const ownerLabel = (it.created_by_name && it.created_by_name.trim())
         || (it.created_by_email ? it.created_by_email.split('@')[0] : '')
-        || '';
-      const ownerPill = ownerLabel
-        ? `<span class="hist-owner" title="Run by ${esc(it.created_by_email || ownerLabel)}">${esc(ownerLabel)}</span>`
-        : '';
+        || 'Anonymous';
+      const ownerTitle = it.created_by_email
+        ? `Run by ${it.created_by_email}`
+        : (it.created_by_name ? `Run by ${it.created_by_name}` : 'Owner not recorded');
+      const ownerPill = `<span class="hist-owner" title="${esc(ownerTitle)}">${esc(ownerLabel)}</span>`;
       return `
         <div class="hist-item" data-id="${esc(it.id)}" data-status="${esc(status)}">
           <div class="hist-item-main">
