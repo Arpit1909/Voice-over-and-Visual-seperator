@@ -956,6 +956,11 @@ function _renderViewer(id, payload, comments, token) {
   // panel below the video player.
   _wireBeatVisibilityTracking();
   _renderPlayerComments();
+
+  // First-time onboarding tour: trigger once the viewer is mounted so the
+  // highlighted elements (player, comments panel, history) are all visible.
+  // No-op for users who've already seen it (gated on TOUR_VERSION key).
+  setTimeout(() => startWelcomeTour(), 600);
 }
 
 // ── Resizable video player (drag handle on the player pane's left edge) ────
@@ -2300,6 +2305,146 @@ async function boot() {
 
   if (!window.location.hash) window.location.hash = '#/new';
   onRouteChange();
+
+  // Wire the "Show tour" link in the sidebar footer so users can replay it
+  // any time. The first-time auto-trigger is in openViewer (so the tour
+  // starts AFTER they have a real analysis to look at, not on a blank app).
+  const tourBtn = $('#tour-replay-btn');
+  if (tourBtn) tourBtn.addEventListener('click', () => startWelcomeTour({ force: true }));
+}
+
+// ── Welcome tour ──────────────────────────────────────────────────────────
+// One-time guided overlay that explains the key features of the viewer.
+// Stored completion is keyed on the version string so we can re-trigger
+// for everyone if a future tour version adds new steps.
+const TOUR_VERSION = 'v1';
+const TOUR_STEPS = [
+  {
+    target: null,
+    title: 'Welcome to VO & Visual Extractor',
+    body: "Quick 30-second tour of the analysis viewer. Skip anytime.",
+  },
+  {
+    target: '.script-table-head',
+    title: 'The script table',
+    body: "VO is the narrator's voice-over. Visuals is what's on screen at that moment. Each row is a beat — one synced moment in the video.",
+  },
+  {
+    target: '.player-card',
+    title: 'Video player',
+    body: "Click any timestamp or beat row to jump there. Press <kbd>Space</kbd> to play / pause. Drag the left edge of the player to resize it; double-click that edge to reset.",
+  },
+  {
+    target: '.player-comments',
+    title: 'Comments — contextual',
+    body: 'Select any text in the script and an "Add comment" button appears. The panel here shows comments for the beat you\'re reading. Switch to "All" to see every comment with a beat label — click any to jump to its highlight.',
+  },
+  {
+    target: '#history-list',
+    title: 'History',
+    body: 'Every past analysis lives here, with a pill showing who ran it. Click to reopen. Hover for rename / delete.',
+  },
+  {
+    target: '.viewer-actions',
+    title: 'Export & share',
+    body: 'Download the script as PDF, DOCX, or TXT. "Share link" copies a URL your teammates can open and comment on.',
+  },
+  {
+    target: null,
+    title: "You're set 🎉",
+    body: 'Submit any YouTube URL or upload a file from "New Analysis" to begin. You can replay this tour anytime via "Show tour" in the sidebar.',
+  },
+];
+
+function startWelcomeTour({ force = false } = {}) {
+  try {
+    if (!force && localStorage.getItem('tour-completed') === TOUR_VERSION) return;
+  } catch { /* */ }
+
+  // Tear down any prior tour DOM (e.g. replay click while one's running).
+  document.querySelectorAll('.tour-backdrop, .tour-tooltip').forEach(el => el.remove());
+  document.querySelectorAll('.tour-highlight').forEach(el => el.classList.remove('tour-highlight'));
+
+  const backdrop = document.createElement('div');
+  backdrop.className = 'tour-backdrop';
+  document.body.appendChild(backdrop);
+
+  const tip = document.createElement('div');
+  tip.className = 'tour-tooltip';
+  document.body.appendChild(tip);
+
+  let idx = 0;
+
+  const cleanup = () => {
+    document.querySelectorAll('.tour-highlight').forEach(el => el.classList.remove('tour-highlight'));
+    backdrop.remove();
+    tip.remove();
+    try { localStorage.setItem('tour-completed', TOUR_VERSION); } catch { /* */ }
+  };
+
+  const showStep = (i) => {
+    if (i < 0 || i >= TOUR_STEPS.length) return cleanup();
+    idx = i;
+
+    document.querySelectorAll('.tour-highlight').forEach(el => el.classList.remove('tour-highlight'));
+    const step = TOUR_STEPS[i];
+    const target = step.target ? document.querySelector(step.target) : null;
+    if (target) {
+      target.classList.add('tour-highlight');
+      target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    const isLast = i === TOUR_STEPS.length - 1;
+    tip.innerHTML = `
+      <div class="tour-step-num">Step ${i + 1} of ${TOUR_STEPS.length}</div>
+      <h3>${step.title}</h3>
+      <p>${step.body}</p>
+      <div class="tour-actions">
+        <button class="tour-skip" type="button">${isLast ? 'Close' : 'Skip tour'}</button>
+        <div class="tour-nav">
+          ${i > 0 ? '<button class="tour-prev" type="button">Back</button>' : ''}
+          <button class="tour-next btn-primary btn-small" type="button">${isLast ? 'Got it' : 'Next →'}</button>
+        </div>
+      </div>`;
+
+    // Position the tooltip near the target (or center if none).
+    requestAnimationFrame(() => {
+      const tipRect = tip.getBoundingClientRect();
+      const tipW = tipRect.width || 360;
+      const tipH = tipRect.height || 200;
+      const margin = 16;
+
+      if (!target) {
+        tip.style.left = `${(window.innerWidth  - tipW) / 2}px`;
+        tip.style.top  = `${(window.innerHeight - tipH) / 2}px`;
+        return;
+      }
+      const r = target.getBoundingClientRect();
+      // Try below first, then above, then to the side, falling back to center.
+      let top  = r.bottom + 14;
+      let left = r.left + r.width / 2 - tipW / 2;
+      if (top + tipH + margin > window.innerHeight) top = Math.max(margin, r.top - tipH - 14);
+      if (top < margin) top = margin;
+      left = Math.max(margin, Math.min(left, window.innerWidth - tipW - margin));
+      tip.style.top  = `${top}px`;
+      tip.style.left = `${left}px`;
+    });
+
+    tip.querySelector('.tour-skip').addEventListener('click', cleanup);
+    tip.querySelector('.tour-next').addEventListener('click', () => showStep(idx + 1));
+    tip.querySelector('.tour-prev')?.addEventListener('click', () => showStep(idx - 1));
+  };
+
+  // Esc key closes the tour. Bound once per tour run.
+  const onKey = (e) => {
+    if (e.key === 'Escape') { cleanup(); document.removeEventListener('keydown', onKey); }
+    else if (e.key === 'ArrowRight') { showStep(idx + 1); }
+    else if (e.key === 'ArrowLeft')  { showStep(idx - 1); }
+  };
+  document.addEventListener('keydown', onKey);
+  backdrop.addEventListener('click', cleanup);
+
+  showStep(0);
 }
 
 boot();
