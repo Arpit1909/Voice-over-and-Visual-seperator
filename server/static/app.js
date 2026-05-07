@@ -957,10 +957,20 @@ function _renderViewer(id, payload, comments, token) {
   _wireBeatVisibilityTracking();
   _renderPlayerComments();
 
-  // First-time onboarding tour: trigger once the viewer is mounted so the
+  // Onboarding tour: trigger once the viewer is mounted so the
   // highlighted elements (player, comments panel, history) are all visible.
-  // No-op for users who've already seen it (gated on TOUR_VERSION key).
-  setTimeout(() => startWelcomeTour(), 600);
+  //   - First-time users (no completion flag): auto-plays once.
+  //   - Anyone who clicked "Show tour" from a non-viewer page: force-plays
+  //     here, having been navigated to the most recent analysis just so
+  //     the tour has real content to highlight.
+  setTimeout(() => {
+    if (_tourForceOnNextViewer) {
+      _tourForceOnNextViewer = false;
+      startWelcomeTour({ force: true });
+    } else {
+      startWelcomeTour();
+    }
+  }, 600);
 }
 
 // ── Resizable video player (drag handle on the player pane's left edge) ────
@@ -2311,19 +2321,46 @@ async function boot() {
   // starts AFTER they have a real analysis to look at, not on a blank app).
   const tourBtn = $('#tour-replay-btn');
   if (tourBtn) {
-    tourBtn.addEventListener('click', () => startWelcomeTour({ force: true }));
+    tourBtn.addEventListener('click', () => _showTourFromAnywhere());
   } else {
     console.warn('[tour] #tour-replay-btn not found — sidebar markup probably stale, hard-refresh');
   }
 
   // Make the tour controls reachable from DevTools so users can debug:
-  //   window.startTour()        → run the tour now (force)
+  //   window.startTour()        → run the tour now (force, auto-loads a viewer)
   //   window.resetTour()        → clear completion flag, next viewer auto-plays
-  window.startTour = () => startWelcomeTour({ force: true });
+  window.startTour = _showTourFromAnywhere;
   window.resetTour = () => {
     try { localStorage.removeItem('tour-completed'); } catch { /* */ }
     console.log('[tour] reset — open any analysis to auto-play, or run startTour()');
   };
+}
+
+// "Show tour" handler — works whether we're already in a viewer or not.
+// If the user is on /new or any non-viewer page, auto-open the most recent
+// completed analysis first so the tour has real content to highlight, then
+// start the tour once the viewer has rendered.
+let _tourForceOnNextViewer = false;
+
+async function _showTourFromAnywhere() {
+  if ((window.location.hash || '').startsWith('#/view/')) {
+    startWelcomeTour({ force: true });
+    return;
+  }
+  try {
+    const data = await api('/api/history');
+    const items = (data && (data.items || data)) || [];
+    const done = items.find(it => it.status === 'done') || items[0];
+    if (!done) {
+      toast('Run an analysis first, then I can show you around the viewer.', 'info', 4000);
+      return;
+    }
+    _tourForceOnNextViewer = true;
+    navigate(`#/view/${done.id}`);
+  } catch (e) {
+    console.error('[tour] could not load history', e);
+    toast('Could not open an analysis to show — try again in a moment.', 'error');
+  }
 }
 
 // ── Welcome tour ──────────────────────────────────────────────────────────
