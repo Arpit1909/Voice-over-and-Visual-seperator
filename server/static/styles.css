@@ -2215,8 +2215,14 @@ body.player-resizing * {
   inset: 0;
   background: rgba(20, 20, 22, 0.45);
   z-index: 9000;
+  /* Visual dim only — clicks pass through to the page underneath so users
+     can actually perform the hands-on action (click a timestamp, drag the
+     resize handle, select text, etc.). The tour locks itself elsewhere
+     (Escape swallowed, no End-tour button). */
+  pointer-events: none;
   animation: tour-fade-in .25s ease-out;
 }
+.tour-tooltip { pointer-events: auto; }
 @keyframes tour-fade-in {
   from { opacity: 0; }
   to   { opacity: 1; }

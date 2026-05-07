@@ -2592,12 +2592,9 @@ function startWelcomeTour({ force = false } = {}) {
     else if (e.key === 'ArrowLeft')  showStep(idx - 1);
   };
   document.addEventListener('keydown', onKey);
-  backdrop.addEventListener('click', (e) => {
-    // Block any click on the dim layer from closing the tour or interacting
-    // with the page underneath.
-    e.preventDefault();
-    e.stopPropagation();
-  });
+  // Backdrop has pointer-events: none in CSS so clicks pass through to the
+  // real page — users can click the highlighted timestamp / drag the resize
+  // handle / select text without the dim layer intercepting them.
 
   showStep(0);
 }
