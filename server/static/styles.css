@@ -2065,46 +2065,76 @@ body.player-resizing * {
   white-space: pre-wrap;
   font-variation-settings: 'opsz' 18;
 }
-.peaks-list { padding: 12px 16px; display: flex; flex-direction: column; gap: 8px; }
-.peak-item {
+/* Peak Moments — clickable rows separated by hairlines, no per-row cards. */
+.peaks-list {
+  padding: 0;
   display: flex;
-  gap: 12px;
-  align-items: flex-start;
-  padding: 9px 12px;
-  background: var(--vo-bg);
-  border: 1px solid var(--vo-border);
-  border-radius: var(--radius-sm);
-  font-size: 12px;
-  cursor: pointer;
-  transition: background .12s, border-color .12s;
+  flex-direction: column;
 }
-.peak-item:hover { background: rgba(228,180,108,.12); border-color: rgba(228,180,108,.55); }
+.peak-item {
+  display: grid;
+  grid-template-columns: 86px 1fr;
+  gap: 14px;
+  align-items: baseline;
+  padding: 12px 18px;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background .12s;
+}
+.peak-item:last-child { border-bottom: none; }
+.peak-item:hover { background: var(--panel-hi); }
 .peak-ts {
   font-family: var(--font-mono);
   font-weight: 500;
+  font-size: 12px;
   color: var(--vo-label);
   white-space: nowrap;
-  background: var(--vo-bg);
-  padding: 2px 9px;
-  border-radius: 999px;
-  border: 1px solid var(--vo-border);
+  background: transparent;
+  padding: 0;
+  border: none;
+  border-radius: 0;
 }
-.peak-desc { color: var(--text-2); line-height: 1.5; }
-.highlights-list { list-style: none; padding: 12px 16px; display: flex; flex-direction: column; gap: 8px; }
-.highlight-item {
+.peak-desc {
+  color: var(--text);
+  line-height: 1.55;
+  font-size: 13px;
+}
+
+/* Key Highlights — editorial bulleted list, no per-item cards. */
+.highlights-list {
+  list-style: none;
+  padding: 14px 18px;
   display: flex;
-  gap: 10px;
-  align-items: flex-start;
-  font-size: 12px;
-  color: var(--text-2);
-  padding: 8px 12px;
-  background: var(--accent-soft);
-  border: 1px solid var(--accent-line);
-  border-radius: var(--radius-sm);
-  line-height: 1.5;
+  flex-direction: column;
+  gap: 0;
 }
-.highlight-item::before { content: "✦"; flex-shrink: 0; color: var(--accent); }
-.empty { color: var(--text-3); font-style: italic; font-size: 12px; padding: 8px; }
+.highlight-item {
+  display: grid;
+  grid-template-columns: 16px 1fr;
+  gap: 10px;
+  align-items: baseline;
+  font-size: 13px;
+  color: var(--text);
+  line-height: 1.6;
+  padding: 8px 0;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  border-bottom: 1px dashed var(--line);
+}
+.highlight-item:last-child { border-bottom: none; }
+.highlight-item::before {
+  content: "—";
+  color: var(--accent);
+  font-weight: 500;
+  text-align: center;
+}
+
+.empty { color: var(--text-3); font-style: italic; font-size: 12px; padding: 14px 18px; }
 
 /* ═══════════════════════════════════════════════════════════════════════════
    TOAST
