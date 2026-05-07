@@ -2213,8 +2213,7 @@ body.player-resizing * {
 .tour-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(20, 20, 22, 0.55);
-  backdrop-filter: blur(2px);
+  background: rgba(20, 20, 22, 0.45);
   z-index: 9000;
   animation: tour-fade-in .25s ease-out;
 }
