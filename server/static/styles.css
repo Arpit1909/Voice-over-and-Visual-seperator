@@ -2276,11 +2276,20 @@ body.player-resizing * {
   50%      { transform: scale(1.20); }
 }
 
-/* While the tour is active, lift overflow clipping on containers whose
-   highlight rings would otherwise be cut off (notably the sidebar, whose
-   overflow:hidden would chop the ring on #history-list). */
-body:has(.tour-backdrop) .sidebar { overflow: visible !important; }
-body:has(.tour-backdrop) .viewer-player-pane { overflow: visible !important; }
+/* While the tour is active:
+   - Lift overflow clipping so highlight rings render fully.
+   - Lift the sidebar's stacking context above the backdrop, otherwise
+     position:sticky traps any z-index inside the sidebar BELOW the
+     dim layer and the highlight ring is invisible.
+   - Same for the player rail (also sticky). */
+body:has(.tour-backdrop) .sidebar {
+  overflow: visible !important;
+  z-index: 9100 !important;
+}
+body:has(.tour-backdrop) .viewer-player-pane {
+  overflow: visible !important;
+  z-index: 9100 !important;
+}
 .tour-tooltip {
   position: fixed;
   z-index: 9002;

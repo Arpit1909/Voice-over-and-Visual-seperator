@@ -2368,7 +2368,7 @@ async function _showTourFromAnywhere() {
 // waits for the user to actually DO the thing (click a timestamp, press
 // Space, select text, etc.) before auto-advancing. A "Skip step" link
 // lets impatient users move on without doing the action.
-const TOUR_VERSION = 'v5-pulse-and-sidebar';
+const TOUR_VERSION = 'v6-locked-until-complete';
 const TOUR_STEPS = [
   {
     title: 'Welcome 👋',
@@ -2529,13 +2529,15 @@ function startWelcomeTour({ force = false } = {}) {
     const isLast       = i === TOUR_STEPS.length - 1;
     const isHandsOn    = !!step.autoAdvance;
     const handsOnHint  = isHandsOn ? `<div class="tour-handson-hint">Auto-advances when you do the action ↑</div>` : '';
+    // Tour is locked — no early-exit button. Only the final step shows "Got it"
+    // which completes the tour. Hands-on steps still allow "Skip step" so users
+    // who can't or don't want to perform the action aren't stuck.
     tip.innerHTML = `
       <div class="tour-step-num">Step ${i + 1} of ${TOUR_STEPS.length}${isHandsOn ? ' · Try it!' : ''}</div>
       <h3>${step.title}</h3>
       <p>${step.body}</p>
       ${handsOnHint}
       <div class="tour-actions">
-        <button class="tour-skip" type="button">End tour</button>
         <div class="tour-nav">
           ${i > 0 ? '<button class="tour-prev" type="button">Back</button>' : ''}
           ${isHandsOn
@@ -2565,7 +2567,6 @@ function startWelcomeTour({ force = false } = {}) {
       tip.style.left = `${left}px`;
     });
 
-    tip.querySelector('.tour-skip').addEventListener('click', cleanup);
     tip.querySelector('.tour-next').addEventListener('click', () => showStep(idx + 1));
     tip.querySelector('.tour-prev')?.addEventListener('click', () => showStep(idx - 1));
 
@@ -2579,13 +2580,24 @@ function startWelcomeTour({ force = false } = {}) {
     }
   };
 
+  // Tour is locked until completion — Escape and backdrop clicks no longer
+  // dismiss it. Arrow keys still navigate. Reaching the last step (or pressing
+  // "Got it") is the only way out, so users always finish the full walkthrough.
   const onKey = (e) => {
-    if (e.key === 'Escape') cleanup();
-    else if (e.key === 'ArrowRight') showStep(idx + 1);
+    if (e.key === 'Escape') {
+      // Swallow Escape so users don't accidentally lose their place mid-tour.
+      e.preventDefault();
+      e.stopPropagation();
+    } else if (e.key === 'ArrowRight') showStep(idx + 1);
     else if (e.key === 'ArrowLeft')  showStep(idx - 1);
   };
   document.addEventListener('keydown', onKey);
-  backdrop.addEventListener('click', cleanup);
+  backdrop.addEventListener('click', (e) => {
+    // Block any click on the dim layer from closing the tour or interacting
+    // with the page underneath.
+    e.preventDefault();
+    e.stopPropagation();
+  });
 
   showStep(0);
 }
