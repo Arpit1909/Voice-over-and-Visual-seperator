@@ -1525,108 +1525,62 @@ function _resolveFocusedBeat() {
   return -1;
 }
 
-// Two-tab view-state for the panel: 'current' shows only comments on the
-// focused beat (default); 'all' lists every comment on the analysis with a
-// beat-context label so the user can jump to any of them.
-let _playerCommentsView = 'current';
-
-function _setPlayerCommentsView(view) {
-  if (view !== 'current' && view !== 'all') return;
-  if (view === _playerCommentsView) return;
-  _playerCommentsView = view;
-  document.querySelectorAll('.player-comments-tab').forEach(t => {
-    const active = t.dataset.pcView === view;
-    t.classList.toggle('is-active', active);
-    t.setAttribute('aria-selected', active ? 'true' : 'false');
-  });
-  _renderPlayerComments();
-}
-
-function _wirePlayerCommentsTabs() {
-  document.querySelectorAll('.player-comments-tab').forEach(t => {
-    if (t._wired) return;
-    t._wired = true;
-    t.addEventListener('click', () => _setPlayerCommentsView(t.dataset.pcView));
-  });
-}
-
-// Pull a friendly beat label ("Beat 3 · 00:00:12 → 00:00:19") straight from
-// the rendered DOM so we don't have to re-thread the beats array down here.
-function _beatLabel(idx) {
-  const el = document.getElementById(`beat-${idx}`);
-  if (!el) return `Beat ${idx + 1}`;
-  const tsEl = el.querySelector('.beat-time-range');
-  const ts = tsEl
-    ? tsEl.textContent.replace(/^\s*⏱\s*/, '').replace(/\s+/g, ' ').trim()
-    : '';
-  return ts ? `Beat ${idx + 1} · ${ts}` : `Beat ${idx + 1}`;
-}
+// Panel mode — 'beat' shows the focused beat's comments; 'all' shows every
+// comment on the analysis with a beat badge for navigation.
+let _commentsMode = 'beat';
 
 function _renderPlayerComments() {
-  const titleEl  = document.getElementById('player-comments-title');
-  const countEl  = document.getElementById('player-comments-count');
-  const listEl   = document.getElementById('player-comments-list');
-  const tabCntEl = document.getElementById('player-comments-all-count');
+  const titleEl = document.getElementById('player-comments-title');
+  const countEl = document.getElementById('player-comments-count');
+  const listEl  = document.getElementById('player-comments-list');
   if (!listEl) return;
 
-  _wirePlayerCommentsTabs();
-
-  // Total live (non-resolved) comments across every beat — shown in the
-  // "All" tab badge and in both header meta strings.
-  const allItems = Object.values(_commentsCache);
-  const allLive  = allItems.filter(c => !c.resolved);
-  const totalLabel = `${allLive.length} total`;
-  if (tabCntEl) {
-    tabCntEl.textContent = String(allLive.length);
-    tabCntEl.style.display = allLive.length ? '' : 'none';
+  // Wire the tab toggle once (idempotent — _wired flag).
+  const tabsEl = document.querySelector('.player-comments-tabs');
+  if (tabsEl && !tabsEl._wired) {
+    tabsEl._wired = true;
+    tabsEl.querySelectorAll('.player-comments-tab').forEach(t => {
+      t.addEventListener('click', () => {
+        const mode = t.dataset.mode;
+        if (mode === _commentsMode) return;
+        _commentsMode = mode;
+        tabsEl.querySelectorAll('.player-comments-tab').forEach(tt => {
+          const on = tt.dataset.mode === mode;
+          tt.classList.toggle('player-comments-tab--active', on);
+          tt.setAttribute('aria-selected', on ? 'true' : 'false');
+        });
+        _renderPlayerComments();
+      });
+    });
   }
 
-  // ── "All" view ─────────────────────────────────────────────────────────
-  // Lists every comment grouped by beat order, with a small "Beat N · ts"
-  // label on each row. Click any row → _focusComment scrolls to the beat
-  // AND opens the existing comment popover anchored to that card.
-  if (_playerCommentsView === 'all') {
-    if (titleEl) titleEl.textContent = allLive.length
-      ? `${allLive.length} comment${allLive.length === 1 ? '' : 's'}`
-      : 'No comments yet';
+  const allLive = Object.values(_commentsCache).filter(c => !c.resolved);
+  const totalLabel = `${allLive.length} total`;
+
+  // ── ALL mode — every comment, click to jump to its beat. ────────────────
+  if (_commentsMode === 'all') {
+    if (titleEl) titleEl.textContent = `${allLive.length} ${allLive.length === 1 ? 'comment' : 'comments'} total`;
     if (countEl) countEl.textContent = String(allLive.length);
 
-    if (!allItems.length) {
-      listEl.innerHTML = `<p class="player-comments-empty">No comments yet. Select any text in the script to add one.</p>`;
+    if (!allLive.length) {
+      listEl.innerHTML = `<p class="player-comments-empty">No comments yet. Select any text in a beat to add one.</p>`;
       return;
     }
 
-    // Beat order first (top-of-script → bottom), oldest-first inside a beat
-    // so threads on the same beat read chronologically.
-    const sorted = allItems.slice().sort((a, b) => {
-      const d = (a.beat_index ?? 0) - (b.beat_index ?? 0);
-      return d !== 0 ? d : (a.created_at || 0) - (b.created_at || 0);
+    // Sort by beat order then by created_at within each beat.
+    const sorted = [...allLive].sort((a, b) => {
+      if (a.beat_index !== b.beat_index) return a.beat_index - b.beat_index;
+      return (b.created_at || 0) - (a.created_at || 0);
     });
 
-    listEl.innerHTML = sorted.map(c => {
-      const quote   = c.quote ? `<div class="player-comment-quote">"${esc(c.quote)}"</div>` : '';
-      const resCls  = c.resolved ? ' player-comment--resolved' : '';
-      const resPill = c.resolved ? `<span class="player-comment-resolved">resolved</span>` : '';
-      return `
-        <button class="player-comment${resCls}" data-cid="${c.id}" type="button">
-          <div class="player-comment-context">${esc(_beatLabel(c.beat_index))}</div>
-          ${quote}
-          <div class="player-comment-meta">
-            <span class="player-comment-author">${esc(c.author || 'Anonymous')}</span>
-            <span class="player-comment-time">${esc(fmtRel(c.created_at))}</span>
-            ${resPill}
-          </div>
-          <div class="player-comment-body">${esc(c.body || '')}</div>
-        </button>`;
-    }).join('');
-
+    listEl.innerHTML = sorted.map(c => _renderPlayerCommentRow(c, { withBeatBadge: true })).join('');
     listEl.querySelectorAll('.player-comment').forEach(btn => {
       btn.addEventListener('click', () => _focusComment(parseInt(btn.dataset.cid, 10)));
     });
     return;
   }
 
-  // ── "Current beat" view (default) ──────────────────────────────────────
+  // ── BEAT mode — only the focused beat's comments. ───────────────────────
   const idx = _resolveFocusedBeat();
   if (idx < 0) {
     if (titleEl) titleEl.textContent = allLive.length ? `0 on this beat · ${totalLabel}` : 'No comments';
@@ -1635,13 +1589,10 @@ function _renderPlayerComments() {
     return;
   }
 
-  const beatComments = Object.values(_commentsCache)
-    .filter(c => c.beat_index === idx);
+  const beatComments = Object.values(_commentsCache).filter(c => c.beat_index === idx);
   const live = beatComments.filter(c => !c.resolved);
 
-  if (titleEl) {
-    titleEl.textContent = `${live.length} on this beat · ${totalLabel}`;
-  }
+  if (titleEl) titleEl.textContent = `${live.length} on this beat · ${totalLabel}`;
   if (countEl) countEl.textContent = String(live.length);
 
   if (!beatComments.length) {
@@ -1651,25 +1602,30 @@ function _renderPlayerComments() {
 
   beatComments.sort((a, b) => (b.created_at || 0) - (a.created_at || 0));
 
-  listEl.innerHTML = beatComments.map(c => {
-    const quote   = c.quote ? `<div class="player-comment-quote">"${esc(c.quote)}"</div>` : '';
-    const resCls  = c.resolved ? ' player-comment--resolved' : '';
-    const resPill = c.resolved ? `<span class="player-comment-resolved">resolved</span>` : '';
-    return `
-      <button class="player-comment${resCls}" data-cid="${c.id}" type="button">
-        ${quote}
-        <div class="player-comment-meta">
-          <span class="player-comment-author">${esc(c.author || 'Anonymous')}</span>
-          <span class="player-comment-time">${esc(fmtRel(c.created_at))}</span>
-          ${resPill}
-        </div>
-        <div class="player-comment-body">${esc(c.body || '')}</div>
-      </button>`;
-  }).join('');
-
+  listEl.innerHTML = beatComments.map(c => _renderPlayerCommentRow(c, { withBeatBadge: false })).join('');
   listEl.querySelectorAll('.player-comment').forEach(btn => {
     btn.addEventListener('click', () => _focusComment(parseInt(btn.dataset.cid, 10)));
   });
+}
+
+// Single comment row — used by both BEAT and ALL modes. The beat badge is
+// only shown in ALL mode (otherwise the row context already implies the beat).
+function _renderPlayerCommentRow(c, { withBeatBadge }) {
+  const quote   = c.quote ? `<div class="player-comment-quote">"${esc(c.quote)}"</div>` : '';
+  const resCls  = c.resolved ? ' player-comment--resolved' : '';
+  const resPill = c.resolved ? `<span class="player-comment-resolved">resolved</span>` : '';
+  const badge   = withBeatBadge ? `<span class="player-comment-beat">Beat ${c.beat_index + 1}</span>` : '';
+  return `
+    <button class="player-comment${resCls}" data-cid="${c.id}" type="button">
+      ${quote}
+      <div class="player-comment-meta">
+        ${badge}
+        <span class="player-comment-author">${esc(c.author || 'Anonymous')}</span>
+        <span class="player-comment-time">${esc(fmtRel(c.created_at))}</span>
+        ${resPill}
+      </div>
+      <div class="player-comment-body">${esc(c.body || '')}</div>
+    </button>`;
 }
 
 // Track which beat the user is currently reading. Algorithm:

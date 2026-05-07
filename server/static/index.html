@@ -241,19 +241,15 @@
                is currently looking at. Tracked via IntersectionObserver +
                video-playback active-beat. Updates as you scroll the script
                or as the video advances. -->
-          <section class="player-comments" id="player-comments" aria-label="Comments on this analysis">
+          <section class="player-comments" id="player-comments" aria-label="Comments">
             <header class="player-comments-head">
-              <div class="player-comments-tabs" role="tablist" aria-label="Comments view">
-                <button class="player-comments-tab is-active"
-                        data-pc-view="current" role="tab" aria-selected="true" type="button">
-                  On this beat
-                </button>
-                <button class="player-comments-tab"
-                        data-pc-view="all" role="tab" aria-selected="false" type="button">
-                  All <span class="player-comments-tab-count" id="player-comments-all-count">0</span>
-                </button>
+              <div class="player-comments-tabs" role="tablist">
+                <button type="button" class="player-comments-tab player-comments-tab--active"
+                        data-mode="beat" role="tab" aria-selected="true">On this beat</button>
+                <button type="button" class="player-comments-tab"
+                        data-mode="all" role="tab" aria-selected="false">All</button>
               </div>
-              <span class="player-comments-meta" id="player-comments-title">No beat selected</span>
+              <span class="player-comments-title" id="player-comments-title">0 comments</span>
               <span class="player-comments-count" id="player-comments-count">0</span>
             </header>
             <div class="player-comments-list" id="player-comments-list">

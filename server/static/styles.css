@@ -1263,108 +1263,52 @@ body.player-resizing * {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 8px 12px 8px 8px;
+  padding: 8px 12px;
   border-bottom: 1px solid var(--line);
   background: var(--panel-soft);
+  flex-wrap: wrap;
 }
-
-/* Two-tab toggle: "On this beat" (default) ↔ "All". Sits flush-left in the
-   panel header. The active tab gets a solid card-style background, inactive
-   tabs are flat — matches the bigger tabs in the New-analysis card. */
 .player-comments-tabs {
   display: inline-flex;
-  align-items: stretch;
-  gap: 2px;
-  padding: 3px;
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 999px;
-  flex: 0 0 auto;
+  padding: 2px;
 }
 .player-comments-tab {
-  appearance: none;
-  background: transparent;
-  border: 0;
-  cursor: pointer;
-  font-family: var(--font-display);
-  font-size: 11.5px;
-  font-weight: 480;
-  font-variation-settings: 'opsz' 18;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
   color: var(--text-2);
-  padding: 4px 10px;
+  padding: 4px 12px;
   border-radius: 999px;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  line-height: 1.2;
+  border: none;
+  background: transparent;
+  cursor: pointer;
   transition: background .12s, color .12s;
-  white-space: nowrap;
 }
 .player-comments-tab:hover { color: var(--text); }
-.player-comments-tab.is-active {
+.player-comments-tab--active {
   background: var(--accent);
   color: #fff;
-  box-shadow: 0 1px 0 rgba(0,0,0,.04);
+  box-shadow: 0 1px 3px rgba(184,90,57,.25);
 }
-.player-comments-tab-count {
-  display: inline-block;
-  min-width: 16px;
-  padding: 0 5px;
-  font-size: 10px;
-  font-weight: 600;
-  line-height: 16px;
-  text-align: center;
-  border-radius: 999px;
-  background: var(--border);
-  color: var(--text-2);
-  font-family: var(--font-mono);
-}
-.player-comments-tab.is-active .player-comments-tab-count {
-  background: rgba(255,255,255,.22);
-  color: #fff;
-}
-
-/* The contextual line ("0 on this beat · 1 total" or "1 comment") shrinks
-   away at narrow panel widths — the tabs + per-row labels carry the meaning. */
-.player-comments-meta {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--text-3);
-  flex: 1 1 auto;
+.player-comments-tab--active:hover { color: #fff; }
+.player-comments-title {
+  font-family: var(--font-display);
+  font-size: 12.5px;
+  font-weight: 480;
+  color: var(--text);
+  font-variation-settings: 'opsz' 18;
+  flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  text-align: right;
 }
+/* Count pill hidden — the title text already says the count
+   (e.g. "3 comments"), so the separate pill would be redundant. */
 .player-comments-count { display: none; }
-
-/* Beat-context label shown on each row in the "All" view, e.g.
-   "Beat 3 · 00:00:12 → 00:00:19". Helps the user know where a click will
-   take them before they make it. */
-.player-comment-context {
-  display: inline-block;
-  font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: .04em;
-  text-transform: uppercase;
-  color: var(--text-3);
-  background: var(--panel-soft);
-  border: 1px solid var(--border);
-  padding: 2px 7px;
-  border-radius: 999px;
-  margin-bottom: 6px;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  vertical-align: middle;
-}
-.player-comment:hover .player-comment-context {
-  background: var(--panel);
-  border-color: var(--border-strong);
-  color: var(--text-2);
-}
 .player-comments-list {
   flex: 1 1 auto;
   min-height: 0;
@@ -1431,6 +1375,22 @@ body.player-resizing * {
 }
 .player-comment-author { font-weight: 500; color: var(--text); }
 .player-comment-time { color: var(--text-3); font-family: var(--font-mono); }
+
+/* Beat badge — shown in "All" mode only, identifies which beat the
+   comment is on. Click the row to jump to that beat. */
+.player-comment-beat {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-line);
+  padding: 1px 7px;
+  border-radius: 999px;
+  margin-right: 6px;
+}
 .player-comment-resolved {
   margin-left: auto;
   font-size: 9px;
